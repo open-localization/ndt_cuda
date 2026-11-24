@@ -308,6 +308,7 @@ protected:
   /** \brief Uploads the map if a copy has not done so yet. */
   void prepareTarget() const;
   void copyOwnIndices();
+  void copyOwnKdTree();
 
   /** \brief Counts a finished iteration. \return true if the optimization should stop. */
   virtual bool finishIteration(double step_length);

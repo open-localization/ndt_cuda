@@ -251,6 +251,24 @@ int main(int argc, char ** argv)
     copied.getIndices() != clean.getIndices() && assigned.getIndices() != clean.getIndices();
   check(own_indices, "copy and assignment: own point indices", own_indices ? 0.0 : 1.0, 0.0);
 
+  // The copies keep the kd-tree of their map after the original changes its map.
+  Cloud::Ptr shifted(new Cloud(*target));
+  for (auto & pt : *shifted) {
+    pt.x += 3.0f;
+  }
+  const double copied_fitness = copied.getFitnessScore();
+  const double assigned_fitness = assigned.getFitnessScore();
+  clean.setInputTarget(shifted);
+  clean.align(out);
+  const double fitness_change = std::max(
+    std::fabs(copied.getFitnessScore() - copied_fitness),
+    std::fabs(assigned.getFitnessScore() - assigned_fitness));
+  const bool own_kdtree = copied.getSearchMethodTarget() != clean.getSearchMethodTarget() &&
+                          assigned.getSearchMethodTarget() != clean.getSearchMethodTarget();
+  check(
+    own_kdtree && fitness_change == 0.0,
+    "copy and assignment: own kd-tree after the original changes its map", fitness_change, 0.0);
+
   // A target without usable voxels must not be reported as a successful alignment.
   Cloud::Ptr only_nan(new Cloud);
   only_nan->insert(only_nan->end(), 10, nan_point);

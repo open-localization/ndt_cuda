@@ -106,6 +106,7 @@ ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::
      !backend_->shareTarget(*other.backend_)))
 {
   copyOwnIndices();
+  copyOwnKdTree();
 }
 
 template <typename PointSource, typename PointTarget>
@@ -144,6 +145,7 @@ ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::operator=(
                                                         other.backend_->numTargetVoxels() == 0 ||
                                                         !backend_->shareTarget(*other.backend_));
   copyOwnIndices();
+  copyOwnKdTree();
   return *this;
 }
 
@@ -154,6 +156,25 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::copyO
   // that shares them with the original races with it in another thread.
   if (this->indices_) {
     this->indices_ = std::make_shared<pcl::Indices>(*this->indices_);
+  }
+}
+
+template <typename PointSource, typename PointTarget>
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::copyOwnKdTree()
+{
+  // pcl::Registration copies the pointer to the kd-tree of the map, and align() rebuilds it after a
+  // map change. A copy of the FLANN tree shares the built index and points, which a rebuild
+  // replaces and does not change.
+  struct OwnKdTree : pcl::search::KdTree<PointTarget>
+  {
+    explicit OwnKdTree(const pcl::search::KdTree<PointTarget> & other)
+    : pcl::search::KdTree<PointTarget>(other)
+    {
+      this->tree_ = this->tree_->makeShared();
+    }
+  };
+  if (this->tree_) {
+    this->tree_ = std::make_shared<OwnKdTree>(*this->tree_);
   }
 }
 
