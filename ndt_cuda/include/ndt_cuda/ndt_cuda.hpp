@@ -104,7 +104,11 @@ public:
 
   /** \brief A copy has its own CUDA stream and scratch buffers and shares the uploaded map of
    * `other`, so its first align() does no upload. If `other` has not uploaded its map yet, the copy
-   * uploads it when it is first needed. */
+   * uploads it when it is first needed.
+   *
+   * The copy also has its own point indices and its own kd-tree of the map, so a copy and `other`
+   * can align in two threads. A kd-tree of another type than pcl::search::KdTree, or one set with
+   * force_no_recompute in setSearchMethodTarget(), stays shared with `other`. */
   NormalDistributionsTransformCUDA(const NormalDistributionsTransformCUDA & other);
   NormalDistributionsTransformCUDA & operator=(const NormalDistributionsTransformCUDA & other);
 

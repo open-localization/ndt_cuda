@@ -50,6 +50,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <typeinfo>
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
@@ -173,7 +174,13 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::copyO
       this->tree_ = this->tree_->makeShared();
     }
   };
-  if (this->tree_) {
+  // A tree of another type would lose its type in the copy. With force_no_recompute, the user
+  // rebuilds the tree, and the copy must follow it. Both stay shared.
+  if (!this->tree_ || this->force_no_recompute_) {
+    return;
+  }
+  const std::type_info & type = typeid(*this->tree_);
+  if (type == typeid(pcl::search::KdTree<PointTarget>) || type == typeid(OwnKdTree)) {
     this->tree_ = std::make_shared<OwnKdTree>(*this->tree_);
   }
 }
