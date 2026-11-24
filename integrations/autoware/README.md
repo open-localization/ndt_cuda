@@ -7,10 +7,13 @@ If your `autoware_core` has the NDT backend interface (`autoware_ndt_scan_matche
 ```bash
 cd ~/autoware/src
 git clone https://github.com/meliketanrikulu/ndt_cuda.git
+touch ndt_cuda/ndt_cuda_autoware_backend/COLCON_IGNORE
 bash ndt_cuda/integrations/autoware/apply.sh core/autoware_core/localization/autoware_ndt_scan_matcher
 cd ~/autoware
 colcon build --packages-up-to autoware_ndt_scan_matcher --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
+
+The `COLCON_IGNORE` file hides the package `ndt_cuda_autoware_backend` from colcon and rosdep, because it does not build without the NDT backend interface.
 
 The CUDA toolkit is needed to build ndt_cuda. The Autoware CUDA images have it, for example `ghcr.io/autowarefoundation/autoware:universe-devel-cuda-humble-2.0.0` (CUDA 12.8).
 

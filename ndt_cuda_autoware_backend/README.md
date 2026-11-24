@@ -15,7 +15,7 @@ This package is a prototype. It needs the NDT backend interface of Autoware Core
 
 ## Build
 
-Put this repository in the `src` directory of a workspace that has Autoware Core, or that has Autoware Core as an underlay. Then build the two packages of this repository:
+Put this repository in the `src` directory of a workspace that has Autoware Core, or that has Autoware Core as an underlay. Then build the two packages of this repository and the packages that they need:
 
 ```bash
 colcon build --packages-up-to ndt_cuda_autoware_backend --cmake-args -DCMAKE_BUILD_TYPE=Release
