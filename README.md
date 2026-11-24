@@ -206,7 +206,7 @@ These numbers come from one machine and one pair of small scans; run the benchma
 
 ### Autoware
 
-Autoware Core versions with the NDT backend interface (`autoware_ndt_scan_matcher_common`) load ndt_cuda as a plugin, with no change to Autoware: build the package [`ndt_cuda_autoware_backend`](ndt_cuda_autoware_backend) and set the parameter `ndt.backend` to `ndt_cuda`. For older versions, [`integrations/autoware`](integrations/autoware) patches the source of the node.
+Autoware Core with the NDT backend interface (`autoware_ndt_scan_matcher_common`) loads ndt_cuda as a plugin, with no change to Autoware: build the package [`ndt_cuda_autoware_backend`](ndt_cuda_autoware_backend) and set the parameter `ndt.backend` to `ndt_cuda`. Only the `main` branch of `autoware_core` has the interface today, and no release has it yet. For the releases, [`integrations/autoware`](integrations/autoware) patches the source of the node.
 
 On the rosbag replay of Autoware 2.0.0 with its sample data, ndt_cuda turns a scan into a pose in 0.74 ms (median), against 3.3 ms for Autoware's own NDT. It finds the initial pose in 0.55 s instead of 3.1 s, with about the same poses and scores. See the [Autoware benchmark](docs/autoware_benchmark.md), which also compares it with cuda_ndt_matcher, and [`integrations/autoware`](integrations/autoware) for the setup.
 

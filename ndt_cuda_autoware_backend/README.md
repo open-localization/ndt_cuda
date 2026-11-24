@@ -6,12 +6,12 @@ This package is the NDT backend `ndt_cuda` for [autoware_ndt_scan_matcher](https
 
 The backend is a wrapper of `ndt_cuda::MultiGridNormalDistributionsTransformCUDA` behind the interface `autoware::ndt_scan_matcher::NdtBackend` of `autoware_ndt_scan_matcher_common`.
 
-This package is a prototype. It needs the NDT backend interface of Autoware Core, which is not merged yet.
+This package is a prototype. It needs the NDT backend interface of Autoware Core, which came with [autowarefoundation/autoware_core#1559](https://github.com/autowarefoundation/autoware_core/pull/1559). The interface is on the `main` branch of `autoware_core`, and no release of Autoware Core has it yet.
 
 ## Requirements
 
 - An NVIDIA GPU and the CUDA toolkit, version 11.4 or later.
-- Autoware Core with the package `autoware_ndt_scan_matcher_common`.
+- Autoware Core from the `main` branch, with the package `autoware_ndt_scan_matcher_common`.
 
 ## Build
 
