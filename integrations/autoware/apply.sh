@@ -11,6 +11,10 @@ if [[ ! -f "$PACKAGE/package.xml" || ! -f "$OMP_INCLUDE/multigrid_ndt_omp.h" ]];
     echo "$PACKAGE is not an autoware_ndt_scan_matcher package" >&2
     exit 1
 fi
+if [[ -f "$PACKAGE/src/ndt_backend_loader.cpp" ]]; then
+    echo "$PACKAGE has the NDT backend interface. Build the package ndt_cuda_autoware_backend instead." >&2
+    exit 1
+fi
 if grep -q ndt_cuda "$PACKAGE/package.xml"; then
     echo "already applied to $PACKAGE"
     exit 0
