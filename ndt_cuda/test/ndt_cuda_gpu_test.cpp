@@ -251,6 +251,63 @@ int main(int argc, char ** argv)
     copied.getIndices() != clean.getIndices() && assigned.getIndices() != clean.getIndices();
   check(own_indices, "copy and assignment: own point indices", own_indices ? 0.0 : 1.0, 0.0);
 
+  // The copies keep the kd-tree of their map after the original changes its map.
+  Cloud::Ptr shifted(new Cloud(*target));
+  for (auto & pt : *shifted) {
+    pt.x += 3.0f;
+  }
+  const double copied_fitness = copied.getFitnessScore();
+  const double assigned_fitness = assigned.getFitnessScore();
+  clean.setInputTarget(shifted);
+  clean.align(out);
+  const double fitness_change = std::max(
+    std::fabs(copied.getFitnessScore() - copied_fitness),
+    std::fabs(assigned.getFitnessScore() - assigned_fitness));
+  const bool own_kdtree = copied.getSearchMethodTarget() != clean.getSearchMethodTarget() &&
+                          assigned.getSearchMethodTarget() != clean.getSearchMethodTarget();
+  check(
+    own_kdtree && fitness_change == 0.0,
+    "copy and assignment: own kd-tree after the original changes its map",
+    own_kdtree ? fitness_change : 1.0, 0.0);
+
+  // A copy made before the first align() builds its own kd-tree, and the original keeps its map
+  // after the copy changes its map.
+  NDT first;
+  first.setInputTarget(target);
+  first.setInputSource(source);
+  NDT early(first);
+  first.align(out);
+  early.align(out);
+  const double first_fitness = first.getFitnessScore();
+  const double early_diff = std::fabs(early.getFitnessScore() - first_fitness);
+  early.setInputTarget(shifted);
+  early.align(out);
+  const double first_change = std::fabs(first.getFitnessScore() - first_fitness);
+  const bool early_own = early.getSearchMethodTarget() != first.getSearchMethodTarget();
+  check(
+    early_own && early_diff == 0.0 && first_change == 0.0,
+    "copy before the first align(): own kd-tree after the copy changes its map",
+    early_own ? std::max(early_diff, first_change) : 1.0, 0.0);
+
+  // A kd-tree of another type, or one that the user rebuilds, stays shared.
+  struct UserTree : pcl::search::KdTree<PointT>
+  {
+  };
+  const auto user_tree = std::make_shared<UserTree>();
+  NDT with_user_tree;
+  with_user_tree.setSearchMethodTarget(user_tree);
+  const NDT user_tree_copy(with_user_tree);
+  const auto forced_tree = std::make_shared<pcl::search::KdTree<PointT>>();
+  NDT with_forced_tree;
+  with_forced_tree.setSearchMethodTarget(forced_tree, true);
+  NDT forced_tree_copy;
+  forced_tree_copy = with_forced_tree;
+  const bool kept = user_tree_copy.getSearchMethodTarget() == user_tree &&
+                    forced_tree_copy.getSearchMethodTarget() == forced_tree;
+  check(
+    kept, "copy and assignment: keep a kd-tree of another type or with force_no_recompute",
+    kept ? 0.0 : 1.0, 0.0);
+
   // A target without usable voxels must not be reported as a successful alignment.
   Cloud::Ptr only_nan(new Cloud);
   only_nan->insert(only_nan->end(), 10, nan_point);
