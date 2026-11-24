@@ -21,15 +21,7 @@ jobs:
         with:
           filters: |
             build:
-              - src/**
-              - include/**
-              - test/**
-              - data/**
-              - cmake/**
-              - examples/**
-              - benchmark/*.cpp
-              - CMakeLists.txt
-              - package.xml
+              - ndt_cuda/**
               - docker/**
               - .github/workflows/ci.yml
 
