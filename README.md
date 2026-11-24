@@ -30,7 +30,12 @@ CUDA accelerated **Normal Distributions Transform (NDT)** point cloud registrati
 
 ## Build
 
-The library is the package in the directory [`ndt_cuda`](ndt_cuda) of this repository.
+This repository holds two packages:
+
+| Directory                                                | Package                                                                                                                                   |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| [`ndt_cuda`](ndt_cuda)                                   | The library. It does not need ROS or Autoware.                                                                                            |
+| [`ndt_cuda_autoware_backend`](ndt_cuda_autoware_backend) | The NDT backend `ndt_cuda` for Autoware's `autoware_ndt_scan_matcher`. It needs Autoware Core, so build it only in an Autoware workspace. |
 
 ### ROS 2
 
@@ -38,7 +43,7 @@ The library is the package in the directory [`ndt_cuda`](ndt_cuda) of this repos
 cd ~/ros2_ws/src
 git clone https://github.com/meliketanrikulu/ndt_cuda.git
 cd ~/ros2_ws
-rosdep install --from-paths src --ignore-src -y   # PCL, Eigen (install the CUDA toolkit separately)
+rosdep install --from-paths src/ndt_cuda/ndt_cuda --ignore-src -y   # PCL, Eigen (install the CUDA toolkit separately)
 colcon build --packages-select ndt_cuda --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
@@ -200,6 +205,8 @@ Median time per `align()` on the sample data (about 16000 source points, resolut
 These numbers come from one machine and one pair of small scans; run the benchmark on your own hardware and data. See the [benchmark report](docs/benchmark.md) for repeated measurements, large clouds, map updates, GPU memory and utilization, and limitations.
 
 ### Autoware
+
+Autoware Core with the NDT backend interface (`autoware_ndt_scan_matcher_common`) loads ndt_cuda as a plugin, with no change to Autoware: build the package [`ndt_cuda_autoware_backend`](ndt_cuda_autoware_backend) and set the parameter `ndt.backend` to `ndt_cuda`. Only the `main` branch of `autoware_core` has the interface today, and no release has it yet. For the releases, [`integrations/autoware`](integrations/autoware) patches the source of the node.
 
 On the rosbag replay of Autoware 2.0.0 with its sample data, ndt_cuda turns a scan into a pose in 0.74 ms (median), against 3.3 ms for Autoware's own NDT. It finds the initial pose in 0.55 s instead of 3.1 s, with about the same poses and scores. See the [Autoware benchmark](docs/autoware_benchmark.md), which also compares it with cuda_ndt_matcher, and [`integrations/autoware`](integrations/autoware) for the setup.
 

@@ -105,6 +105,7 @@ ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::
     (other.target_upload_pending_ || other.backend_->numTargetVoxels() == 0 ||
      !backend_->shareTarget(*other.backend_)))
 {
+  copyOwnIndices();
 }
 
 template <typename PointSource, typename PointTarget>
@@ -142,7 +143,18 @@ ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::operator=(
   target_upload_pending_ = other.target_ != nullptr && (other.target_upload_pending_ ||
                                                         other.backend_->numTargetVoxels() == 0 ||
                                                         !backend_->shareTarget(*other.backend_));
+  copyOwnIndices();
   return *this;
+}
+
+template <typename PointSource, typename PointTarget>
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::copyOwnIndices()
+{
+  // pcl::PCLBase copies the pointer to the point indices, and each align() resizes them. A copy
+  // that shares them with the original races with it in another thread.
+  if (this->indices_) {
+    this->indices_ = std::make_shared<pcl::Indices>(*this->indices_);
+  }
 }
 
 template <typename PointSource, typename PointTarget>

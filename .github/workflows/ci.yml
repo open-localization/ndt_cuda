@@ -20,6 +20,7 @@ jobs:
           filters: |
             build:
               - ndt_cuda/**
+              - ndt_cuda_autoware_backend/**
               - .github/workflows/ci.yml
 
   autoware-index:
