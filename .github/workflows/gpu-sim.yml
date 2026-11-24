@@ -10,7 +10,7 @@ name: GPU Simulator
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
     paths:
       - "ndt_cuda/src/**"
       - "ndt_cuda/include/**"
