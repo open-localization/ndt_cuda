@@ -69,10 +69,19 @@ NdtResult from_cuda_result(ndt_cuda::NdtResult && cuda_result)
 
 }  // namespace
 
+// pcl::Registration keeps the source cloud after align(), but the interface does not let the
+// backend keep it.
+class Ndt : public ndt_cuda::MultiGridNormalDistributionsTransformCUDA<
+              NdtBackend::PointSource, NdtBackend::PointTarget>
+{
+public:
+  using MultiGridNormalDistributionsTransformCUDA::MultiGridNormalDistributionsTransformCUDA;
+
+  void release_source() { this->input_.reset(); }
+};
+
 class NdtCudaBackend : public NdtBackend
 {
-  using Ndt = ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>;
-
 public:
   // pluginlib needs a default constructor that does not use the GPU. initialize() gets the GPU.
   NdtCudaBackend() = default;
@@ -152,6 +161,7 @@ public:
     pcl::PointCloud<PointSource> aligned_source;
     ndt_->setInputSource(source);
     ndt_->align(aligned_source, guess);
+    ndt_->release_source();
     return from_cuda_result(ndt_->getResult());
   }
 

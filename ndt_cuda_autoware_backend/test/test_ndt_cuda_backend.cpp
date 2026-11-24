@@ -234,32 +234,30 @@ TEST(NdtCudaBackend, AlignWithoutAMapGivesTheGuess)
   const NdtBackend::SharedPtr cuda = make_backend("ndt_cuda", make_params());
   SKIP_WITHOUT_GPU(cuda);
   const NdtBackend::SharedPtr omp = make_backend("ndt_omp", make_params());
+  ASSERT_NE(omp, nullptr);
 
-  // One point gives no voxel, because a voxel needs more points.
+  // One point gives no voxel, because a voxel needs more points. The node aligns only while
+  // has_target() is true, so the map has an id.
   auto one_point = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
   one_point->emplace_back(1.0F, 2.0F, 3.0F);
-  for (const bool with_map : {false, true}) {
-    SCOPED_TRACE(with_map ? "map without voxels" : "no map");
-    if (with_map) {
-      cuda->add_target(one_point, "a");
-      cuda->commit_target();
-      omp->add_target(one_point, "a");
-      omp->commit_target();
-    }
-    const NdtResult result = cuda->align(make_guess(), make_scan());
-    const NdtResult expected = omp->align(make_guess(), make_scan());
-    EXPECT_EQ(result.pose, make_guess());
-    EXPECT_EQ(result.iteration_num, 0);
-    EXPECT_EQ(result.transform_probability, 0.0F);
-    EXPECT_EQ(result.nearest_voxel_transformation_likelihood, 0.0F);
-    EXPECT_EQ(result.transformation_array.size(), expected.transformation_array.size());
-    EXPECT_EQ(
-      result.transform_probability_array.size(), expected.transform_probability_array.size());
-    EXPECT_EQ(
-      result.nearest_voxel_transformation_likelihood_array.size(),
-      expected.nearest_voxel_transformation_likelihood_array.size());
-    EXPECT_EQ(result.transformation_array.size(), 1U);
-  }
+  cuda->add_target(one_point, "a");
+  cuda->commit_target();
+  omp->add_target(one_point, "a");
+  omp->commit_target();
+  ASSERT_TRUE(cuda->has_target());
+
+  const NdtResult result = cuda->align(make_guess(), make_scan());
+  const NdtResult expected = omp->align(make_guess(), make_scan());
+  EXPECT_EQ(result.pose, make_guess());
+  EXPECT_EQ(result.iteration_num, 0);
+  EXPECT_EQ(result.transform_probability, 0.0F);
+  EXPECT_EQ(result.nearest_voxel_transformation_likelihood, 0.0F);
+  EXPECT_EQ(result.transformation_array.size(), expected.transformation_array.size());
+  EXPECT_EQ(result.transform_probability_array.size(), expected.transform_probability_array.size());
+  EXPECT_EQ(
+    result.nearest_voxel_transformation_likelihood_array.size(),
+    expected.nearest_voxel_transformation_likelihood_array.size());
+  EXPECT_EQ(result.transformation_array.size(), 1U);
 }
 
 TEST(NdtCudaBackend, CloneIsIndependent)
@@ -277,13 +275,22 @@ TEST(NdtCudaBackend, CloneIsIndependent)
   EXPECT_EQ(result.pose, expected.pose);
   EXPECT_EQ(result.transform_probability, expected.transform_probability);
 
-  // A change of the clone does not change the original, and the reverse.
+  // A change of the clone does not change the original.
   clone->remove_target("a");
   clone->commit_target();
   clone->unset_regularization_pose();
   EXPECT_FALSE(clone->has_target());
   EXPECT_TRUE(backend->has_target());
   EXPECT_EQ(backend->align(make_guess(), make_scan()).pose, expected.pose);
+
+  // A change of the original does not change a clone.
+  const NdtBackend::SharedPtr second_clone = backend->clone();
+  backend->remove_target("a");
+  backend->commit_target();
+  backend->unset_regularization_pose();
+  EXPECT_FALSE(backend->has_target());
+  EXPECT_TRUE(second_clone->has_target());
+  EXPECT_EQ(second_clone->align(make_guess(), make_scan()).pose, expected.pose);
 }
 
 // Two instances must not share mutable state (see NdtBackend). Here the original and its clone
@@ -303,11 +310,11 @@ TEST(NdtCudaBackend, CloneAndOriginalAlignAtTheSameTime)
   const NdtResult expected_small = clone->align(make_guess(), small_scan);
 
   std::thread other([&]() {
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 500; ++i) {
       EXPECT_EQ(clone->align(make_guess(), small_scan).pose, expected_small.pose);
     }
   });
-  for (int i = 0; i < 100; ++i) {
+  for (int i = 0; i < 500; ++i) {
     EXPECT_EQ(backend->align(make_guess(), large_scan).pose, expected_large.pose);
   }
   other.join();
@@ -356,7 +363,36 @@ TEST(NdtCudaBackend, CloneEmptyHasTheParametersAndNoMap)
     empty->align(make_guess(), make_scan()).pose, reference->align(make_guess(), make_scan()).pose);
 }
 
-// The node replaces a part of the map while the active instance aligns in another thread.
+// The incremental map update of the node: a clone of the active instance gets new map parts in
+// another thread while the active instance aligns. The clone shares the map of the active instance
+// on the GPU until its commit_target().
+TEST(NdtCudaBackend, MapUpdateOfACloneInAnotherThread)
+{
+  const NdtBackend::SharedPtr active = make_backend_with_map("ndt_cuda");
+  SKIP_WITHOUT_GPU(active);
+  const NdtResult expected = active->align(make_guess(), make_scan());
+
+  const NdtBackend::SharedPtr secondary = active->clone();
+  NdtBackend::SharedPtr updated;
+  std::thread map_update([&]() {
+    for (int i = 0; i < 20; ++i) {
+      secondary->remove_target(i % 2 == 0 ? "a" : "b");
+      secondary->add_target(make_map(), i % 2 == 0 ? "b" : "a");
+      secondary->commit_target();
+      updated = secondary->clone();
+    }
+  });
+  for (int i = 0; i < 200; ++i) {
+    EXPECT_EQ(active->align(make_guess(), make_scan()).pose, expected.pose);
+  }
+  map_update.join();
+  EXPECT_EQ(active->get_current_map_ids(), std::vector<std::string>{"a"});
+  EXPECT_EQ(updated->get_current_map_ids(), std::vector<std::string>{"a"});
+  EXPECT_EQ(updated->align(make_guess(), make_scan()).pose, expected.pose);
+}
+
+// The rebuild of the node: an empty instance gets the map in another thread while the active
+// instance aligns.
 TEST(NdtCudaBackend, MapUpdateOfAnInstanceInAnotherThread)
 {
   const NdtBackend::SharedPtr active = make_backend_with_map("ndt_cuda");
