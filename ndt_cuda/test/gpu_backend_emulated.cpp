@@ -3,25 +3,28 @@
 //
 // CPU emulation of ndt_cuda::GpuBackend, used only by the tests.
 //
-// It runs the exact per-point code of the CUDA kernels (src/ndt_cuda_kernels.cuh) on the CPU and reproduces the
-// GPU data layout (origin-relative float voxels, hash table, float per-point accumulation, double reduction).
-// Linking the tests against this file instead of gpu_backend.cu lets ndt_cuda::NormalDistributionsTransformCUDA
-// run end-to-end on a machine without a GPU.
+// It runs the exact per-point code of the CUDA kernels (src/ndt_cuda_kernels.cuh) on the CPU and
+// reproduces the GPU data layout (origin-relative float voxels, hash table, float per-point
+// accumulation, double reduction). Linking the tests against this file instead of gpu_backend.cu
+// lets ndt_cuda::NormalDistributionsTransformCUDA run end-to-end on a machine without a GPU.
+
+#include "ndt_cuda_kernels.cuh"
 
 #include <ndt_cuda/gpu_backend.hpp>
 #include <ndt_cuda/search_method.hpp>
 
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
-#include "ndt_cuda_kernels.cuh"
+namespace ndt_cuda
+{
 
-namespace ndt_cuda {
+using namespace kernels;  // NOLINT(build/namespaces): the same names as gpu_backend.cu
 
-using namespace kernels;
-
-struct GpuBackend::Impl {
+struct GpuBackend::Impl
+{
   std::vector<int32_t> slot_keys;
   std::vector<uint32_t> slot_values;
   std::vector<DeviceVoxel> voxels;
@@ -31,9 +34,10 @@ struct GpuBackend::Impl {
   std::vector<float4> source;
 
   template <int MODE, bool HESSIAN>
-  void derivatives(const KernelParams& p, double out[kNumDerivativeValues]) const {
+  void derivatives(const KernelParams & p, double out[kNumDerivativeValues]) const
+  {
     for (int k = 0; k < kNumDerivativeValues; k++) out[k] = 0.0;
-    for (const float4& pt : source) {
+    for (const float4 & pt : source) {
       float acc[kNumDerivativeValues] = {0.0f};
       accumulateDerivatives<MODE, HESSIAN>(grid, p, pt, acc);
       for (int k = 0; k < kNumDerivativeValues; k++) out[k] += acc[k];
@@ -41,9 +45,10 @@ struct GpuBackend::Impl {
   }
 
   template <int MODE>
-  double score(const KernelParams& p, const std::vector<float4>& points) const {
+  double score(const KernelParams & p, const std::vector<float4> & points) const
+  {
     double sum = 0.0;
-    for (const float4& pt : points) {
+    for (const float4 & pt : points) {
       float acc[kNumScoreValues] = {0.0f};
       accumulateScore<MODE>(grid, p, pt, acc);
       sum += acc[0];
@@ -52,9 +57,12 @@ struct GpuBackend::Impl {
   }
 
   template <int MODE>
-  void probability(const KernelParams& p, const std::vector<float4>& points, double out[kNumProbabilityValues]) const {
+  void probability(
+    const KernelParams & p, const std::vector<float4> & points,
+    double out[kNumProbabilityValues]) const
+  {
     for (int k = 0; k < kNumProbabilityValues; k++) out[k] = 0.0;
-    for (const float4& pt : points) {
+    for (const float4 & pt : points) {
       float acc[kNumProbabilityValues] = {0.0f};
       accumulateProbability<MODE>(grid, p, pt, acc);
       for (int k = 0; k < kNumProbabilityValues; k++) out[k] += acc[k];
@@ -62,14 +70,17 @@ struct GpuBackend::Impl {
   }
 
   template <int MODE>
-  void nearestScores(const KernelParams& p, const std::vector<float4>& points, float* scores) const {
+  void nearestScores(
+    const KernelParams & p, const std::vector<float4> & points, float * scores) const
+  {
     for (std::size_t i = 0; i < points.size(); i++) {
       float sum, nearest;
       scores[i] = pointProbability<MODE>(grid, p, points[i], sum, nearest) ? nearest : -1.0f;
     }
   }
 
-  KernelParams scoreParams(double gauss_d1, double gauss_d2, double gauss_d3, float radius) const {
+  KernelParams scoreParams(double gauss_d1, double gauss_d2, double gauss_d3, float radius) const
+  {
     const float identity[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     KernelParams p;
     std::memset(&p, 0, sizeof(p));
@@ -82,21 +93,29 @@ struct GpuBackend::Impl {
   }
 };
 
-GpuBackend::GpuBackend(int) : impl_(new Impl) {}
-GpuBackend::~GpuBackend() {}
+GpuBackend::GpuBackend([[maybe_unused]] int device) : impl_(new Impl)
+{
+}
+GpuBackend::~GpuBackend()
+{
+}
 
-int GpuBackend::device() const {
+int GpuBackend::device() const
+{
   return 0;
 }
-std::size_t GpuBackend::numTargetVoxels() const {
+std::size_t GpuBackend::numTargetVoxels() const
+{
   return impl_->voxels.size();
 }
-std::size_t GpuBackend::numSourcePoints() const {
+std::size_t GpuBackend::numSourcePoints() const
+{
   return impl_->source.size();
 }
 
-void GpuBackend::setTarget(const VoxelGridHost& g) {
-  Impl& m = *impl_;
+void GpuBackend::setTarget(const VoxelGridHost & g)
+{
+  Impl & m = *impl_;
   m.has_target = false;
   m.voxels.clear();
   const std::size_t n = g.size();
@@ -112,14 +131,19 @@ void GpuBackend::setTarget(const VoxelGridHost& g) {
   }
   m.voxels.resize(n);
   for (std::size_t i = 0; i < n; i++) {
-    const double* mu = &g.means[3 * i];
-    const double* ic = &g.icovs[6 * i];
-    m.voxels[i].a = make_float4(float(mu[0] - m.origin[0]), float(mu[1] - m.origin[1]), float(mu[2] - m.origin[2]), float(ic[0]));
-    m.voxels[i].b = make_float4(float(ic[1]), float(ic[2]), float(ic[3]), float(ic[4]));
-    m.voxels[i].c = make_float4(float(ic[5]), 0.0f, 0.0f, 0.0f);
+    const double * mu = &g.means[3 * i];
+    const double * ic = &g.icovs[6 * i];
+    m.voxels[i].a = make_float4(
+      static_cast<float>(mu[0] - m.origin[0]), static_cast<float>(mu[1] - m.origin[1]),
+      static_cast<float>(mu[2] - m.origin[2]), static_cast<float>(ic[0]));
+    m.voxels[i].b = make_float4(
+      static_cast<float>(ic[1]), static_cast<float>(ic[2]), static_cast<float>(ic[3]),
+      static_cast<float>(ic[4]));
+    m.voxels[i].c = make_float4(static_cast<float>(ic[5]), 0.0f, 0.0f, 0.0f);
   }
   bool unique_keys = true;
-  const std::size_t capacity = buildHashTable(g.keys, g.flags, m.slot_keys, m.slot_values, unique_keys);
+  const std::size_t capacity =
+    buildHashTable(g.keys, g.flags, m.slot_keys, m.slot_values, unique_keys);
   m.grid.slot_keys = m.slot_keys.data();
   m.grid.slot_values = m.slot_values.data();
   m.grid.voxels = m.voxels.data();
@@ -128,10 +152,11 @@ void GpuBackend::setTarget(const VoxelGridHost& g) {
   m.has_target = true;
 }
 
-bool GpuBackend::shareTarget(const GpuBackend& other) {
+bool GpuBackend::shareTarget(const GpuBackend & other)
+{
   // The emulation copies the map. The real backend shares the device buffers.
-  const Impl& o = *other.impl_;
-  Impl& m = *impl_;
+  const Impl & o = *other.impl_;
+  Impl & m = *impl_;
   m.slot_keys = o.slot_keys;
   m.slot_values = o.slot_values;
   m.voxels = o.voxels;
@@ -144,13 +169,15 @@ bool GpuBackend::shareTarget(const GpuBackend& other) {
   return true;
 }
 
-void GpuBackend::setSource(const float* xyzw, std::size_t num_points) {
+void GpuBackend::setSource(const float * xyzw, std::size_t num_points)
+{
   impl_->source.resize(num_points);
   if (num_points) std::memcpy(impl_->source.data(), xyzw, num_points * sizeof(float4));
 }
 
-DerivativeResult GpuBackend::computeDerivatives(const DerivativeParams& params) {
-  Impl& m = *impl_;
+DerivativeResult GpuBackend::computeDerivatives(const DerivativeParams & params)
+{
+  Impl & m = *impl_;
   DerivativeResult result;
   std::memset(&result, 0, sizeof(result));
   if (!m.has_target || m.voxels.empty() || m.source.empty()) return result;
@@ -196,8 +223,11 @@ DerivativeResult GpuBackend::computeDerivatives(const DerivativeParams& params) 
   return result;
 }
 
-double GpuBackend::calculateScore(const float* xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, double gauss_d3, float radius, int search_method) {
-  Impl& m = *impl_;
+double GpuBackend::calculateScore(
+  const float * xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, double gauss_d3,
+  float radius, int search_method)
+{
+  Impl & m = *impl_;
   if (!m.has_target || m.voxels.empty() || num_points == 0) return 0.0;
   std::vector<float4> points(num_points);
   std::memcpy(points.data(), xyzw, num_points * sizeof(float4));
@@ -222,8 +252,11 @@ double GpuBackend::calculateScore(const float* xyzw, std::size_t num_points, dou
   return sum / static_cast<double>(num_points);
 }
 
-ProbabilityResult GpuBackend::calculateProbability(const float* xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, float radius, int search_method) {
-  Impl& m = *impl_;
+ProbabilityResult GpuBackend::calculateProbability(
+  const float * xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, float radius,
+  int search_method)
+{
+  Impl & m = *impl_;
   ProbabilityResult result = {0.0, 0.0, 0.0};
   if (!m.has_target || m.voxels.empty() || num_points == 0) return result;
   std::vector<float4> points(num_points);
@@ -251,8 +284,11 @@ ProbabilityResult GpuBackend::calculateProbability(const float* xyzw, std::size_
   return result;
 }
 
-void GpuBackend::calculateNearestVoxelScores(const float* xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, float radius, int search_method, float* scores) {
-  Impl& m = *impl_;
+void GpuBackend::calculateNearestVoxelScores(
+  const float * xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, float radius,
+  int search_method, float * scores)
+{
+  Impl & m = *impl_;
   if (!m.has_target || m.voxels.empty() || num_points == 0) {
     for (std::size_t i = 0; i < num_points; i++) scores[i] = -1.0f;
     return;
@@ -277,10 +313,12 @@ void GpuBackend::calculateNearestVoxelScores(const float* xyzw, std::size_t num_
   }
 }
 
-int GpuBackend::deviceCount() {
+int GpuBackend::deviceCount()
+{
   return 1;
 }
-std::string GpuBackend::deviceName(int) {
+std::string GpuBackend::deviceName([[maybe_unused]] int device)
+{
   return "CPU emulation";
 }
 

@@ -10,15 +10,15 @@ name: GPU Simulator
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - "ndt_cuda/src/**"
-      - "ndt_cuda/include/**"
-      - "ndt_cuda/test/**"
-      - "ndt_cuda/data/**"
-      - "ndt_cuda/cmake/**"
-      - "ndt_cuda/CMakeLists.txt"
-      - ".github/workflows/gpu-sim.yml"
+      - ndt_cuda/src/**
+      - ndt_cuda/include/**
+      - ndt_cuda/test/**
+      - ndt_cuda/data/**
+      - ndt_cuda/cmake/**
+      - ndt_cuda/CMakeLists.txt
+      - .github/workflows/gpu-sim.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

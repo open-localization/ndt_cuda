@@ -42,19 +42,24 @@
 
 #pragma once
 
-#include <cmath>
-
 #include <Eigen/Core>
 
-namespace ndt_cuda {
+#include <cmath>
+
+namespace ndt_cuda
+{
 
 /** \brief Angular components of the point derivatives, Equation 6.19 and 6.21 [Magnusson 2009].
  *
- * Same tables as j_ang / h_ang in ndt_omp_impl.hpp, with one difference: row 6 of h_ang (d1, the second derivative
- * w.r.t. pitch) uses -sin(pitch) as in ndt_omp's double precision path (h_ang_d1_). ndt_omp's float path uses
- * +sin(pitch) there, which is a sign error that only affects the (pitch, pitch) entry of the hessian.
+ * Same tables as j_ang / h_ang in ndt_omp_impl.hpp, with one difference: row 6 of h_ang (d1, the
+ * second derivative w.r.t. pitch) uses -sin(pitch) as in ndt_omp's double precision path
+ * (h_ang_d1_). ndt_omp's float path uses +sin(pitch) there, which is a sign error that only affects
+ * the (pitch, pitch) entry of the hessian.
  */
-inline void computeAngleDerivatives(const Eigen::Matrix<double, 6, 1>& p, bool compute_hessian, float j_ang[8][3], float h_ang[15][3]) {
+inline void computeAngleDerivatives(
+  const Eigen::Matrix<double, 6, 1> & p, bool compute_hessian, float j_ang[8][3],
+  float h_ang[15][3])
+{
   // Simplified math for near 0 angles
   double cx, cy, cz, sx, sy, sz;
   if (std::fabs(p(3)) < 10e-5) {
@@ -93,8 +98,9 @@ inline void computeAngleDerivatives(const Eigen::Matrix<double, 6, 1>& p, bool c
     for (int c = 0; c < 3; c++) j_ang[r][c] = static_cast<float>(j[r][c]);
 
   if (compute_hessian) {
-    // Precomputed angular hessian components. Letters correspond to Equation 6.21 and numbers correspond to row index [Magnusson 2009]
-    // The sign of 'sx * sz' in c2 is incorrect in [Magnusson 2009], and it is fixed here (as in ndt_omp).
+    // Precomputed angular hessian components. Letters correspond to Equation 6.21 and numbers
+    // correspond to row index [Magnusson 2009] The sign of 'sx * sz' in c2 is incorrect in
+    // [Magnusson 2009], and it is fixed here (as in ndt_omp).
     const double h[15][3] = {
       {(-cx * sz - sx * sy * cz), (-cx * cz + sx * sy * sz), sx * cy},     // a2
       {(-sx * sz + cx * sy * cz), (-cx * sy * sz - sx * cz), (-cx * cy)},  // a3
@@ -102,15 +108,15 @@ inline void computeAngleDerivatives(const Eigen::Matrix<double, 6, 1>& p, bool c
       {(sx * cy * cz), (-sx * cy * sz), (sx * sy)},                        // b3
       {(-sx * cz - cx * sy * sz), (sx * sz - cx * sy * cz), 0},            // c2
       {(cx * cz - sx * sy * sz), (-sx * sy * cz - cx * sz), 0},            // c3
-      {(-cy * cz), (cy * sz), (-sy)},                                      // d1 (see the note above)
-      {(-sx * sy * cz), (sx * sy * sz), (sx * cy)},                        // d2
-      {(cx * sy * cz), (-cx * sy * sz), (-cx * cy)},                       // d3
-      {(sy * sz), (sy * cz), 0},                                           // e1
-      {(-sx * cy * sz), (-sx * cy * cz), 0},                               // e2
-      {(cx * cy * sz), (cx * cy * cz), 0},                                 // e3
-      {(-cy * cz), (cy * sz), 0},                                          // f1
-      {(-cx * sz - sx * sy * cz), (-cx * cz + sx * sy * sz), 0},           // f2
-      {(-sx * sz + cx * sy * cz), (-cx * sy * sz - sx * cz), 0}};          // f3
+      {(-cy * cz), (cy * sz), (-sy)},                              // d1 (see the note above)
+      {(-sx * sy * cz), (sx * sy * sz), (sx * cy)},                // d2
+      {(cx * sy * cz), (-cx * sy * sz), (-cx * cy)},               // d3
+      {(sy * sz), (sy * cz), 0},                                   // e1
+      {(-sx * cy * sz), (-sx * cy * cz), 0},                       // e2
+      {(cx * cy * sz), (cx * cy * cz), 0},                         // e3
+      {(-cy * cz), (cy * sz), 0},                                  // f1
+      {(-cx * sz - sx * sy * cz), (-cx * cz + sx * sy * sz), 0},   // f2
+      {(-sx * sz + cx * sy * cz), (-cx * sy * sz - sx * cz), 0}};  // f3
     for (int r = 0; r < 15; r++)
       for (int c = 0; c < 3; c++) h_ang[r][c] = static_cast<float>(h[r][c]);
   }

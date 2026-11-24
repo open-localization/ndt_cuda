@@ -6,11 +6,11 @@ Earlier versions of this report used Autoware 1.5.0. The results on Autoware 2.0
 
 This report runs the [rosbag replay simulation](https://docs.autoware.org/main/simulation/rosbag-replay-simulation/) of Autoware 2.0.0 with three NDT scan matchers. Autoware and the replay stay the same; only the scan matcher changes.
 
-| Name in this report | What runs |
-| --- | --- |
-| Autoware NDT | Autoware's own `autoware_ndt_scan_matcher`, unchanged. It uses Autoware's copy of tier4/ndt_omp on the CPU. |
-| ndt_cuda | The same `autoware_ndt_scan_matcher` node, with [`integrations/autoware/apply.sh`](../integrations/autoware) applied so that it uses ndt_cuda. |
-| cuda_ndt_matcher | [NEWSLabNTU/cuda_ndt_matcher](https://github.com/NEWSLabNTU/cuda_ndt_matcher) at commit `99540d8`, a separate GPU scan matcher node in Rust. It replaces the Autoware node through a launch file overlay, with the same topics and parameter file. |
+| Name in this report | What runs                                                                                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Autoware NDT        | Autoware's own `autoware_ndt_scan_matcher`, unchanged. It uses Autoware's copy of tier4/ndt_omp on the CPU.                                                                                                                                        |
+| ndt_cuda            | The same `autoware_ndt_scan_matcher` node, with [`integrations/autoware/apply.sh`](../integrations/autoware) applied so that it uses ndt_cuda.                                                                                                     |
+| cuda_ndt_matcher    | [NEWSLabNTU/cuda_ndt_matcher](https://github.com/NEWSLabNTU/cuda_ndt_matcher) at commit `99540d8`, a separate GPU scan matcher node in Rust. It replaces the Autoware node through a launch file overlay, with the same topics and parameter file. |
 
 In summary, on one laptop GPU and the 30 second Autoware sample bag:
 
@@ -25,21 +25,21 @@ In summary, on one laptop GPU and the 30 second Autoware sample bag:
 
 The replay in RViz with each scan matcher, in real time. The corner shows the CPU, GPU and video memory use of the scan matcher process, with the GPU use from a Nsight Systems trace (see [Reproducing](#reproducing)).
 
-| Autoware NDT (CPU) | ndt_cuda (GPU) | cuda_ndt_matcher (GPU) |
-| --- | --- | --- |
+| Autoware NDT (CPU)                                                                                                   | ndt_cuda (GPU)                                                                                                   | cuda_ndt_matcher (GPU)                                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | [![Autoware NDT](https://img.youtube.com/vi/QOUuGVEgVDo/hqdefault.jpg)](https://www.youtube.com/watch?v=QOUuGVEgVDo) | [![ndt_cuda](https://img.youtube.com/vi/3OanyXWvJuQ/hqdefault.jpg)](https://www.youtube.com/watch?v=3OanyXWvJuQ) | [![cuda_ndt_matcher](https://img.youtube.com/vi/9hYJ9cjiBDE/hqdefault.jpg)](https://www.youtube.com/watch?v=9hYJ9cjiBDE) |
 
 ## Test setup
 
-| Component | Value |
-| --- | --- |
-| GPU | NVIDIA GeForce RTX 3050 Ti Laptop GPU, 4 GB, driver 595.99.02 |
-| CPU | Intel Core i7-11800H, 8 cores, 16 threads |
-| Autoware | 2.0.0 (`autoware_core` 1.10.0, `autoware_universe` 0.53.1), Docker image `ghcr.io/autowarefoundation/autoware:universe-devel-cuda-humble-2.0.0-amd64` (`sha256:5443f9c5…`), ROS 2 Humble, CUDA 12.8 |
-| Data | Autoware's sample map (326867 points) and sample rosbag (30 s, 3 Velodyne lidars), as in the Autoware documentation |
-| Replay | `ros2 bag play -r 0.2`, as in the Autoware documentation |
-| NDT parameters | Autoware's defaults for all three: resolution 2 m, at most 30 iterations, transformation epsilon 0.01, no line search, 200 particles for the initial pose |
-| Runs | 3 per scan matcher, interleaved, without RViz, and one more per GPU version with Nsight Systems for the GPU use |
+| Component      | Value                                                                                                                                                                                               |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GPU            | NVIDIA GeForce RTX 3050 Ti Laptop GPU, 4 GB, driver 595.99.02                                                                                                                                       |
+| CPU            | Intel Core i7-11800H, 8 cores, 16 threads                                                                                                                                                           |
+| Autoware       | 2.0.0 (`autoware_core` 1.10.0, `autoware_universe` 0.53.1), Docker image `ghcr.io/autowarefoundation/autoware:universe-devel-cuda-humble-2.0.0-amd64` (`sha256:5443f9c5…`), ROS 2 Humble, CUDA 12.8 |
+| Data           | Autoware's sample map (326867 points) and sample rosbag (30 s, 3 Velodyne lidars), as in the Autoware documentation                                                                                 |
+| Replay         | `ros2 bag play -r 0.2`, as in the Autoware documentation                                                                                                                                            |
+| NDT parameters | Autoware's defaults for all three: resolution 2 m, at most 30 iterations, transformation epsilon 0.01, no line search, 200 particles for the initial pose                                           |
+| Runs           | 3 per scan matcher, interleaved, without RViz, and one more per GPU version with Nsight Systems for the GPU use                                                                                     |
 
 Two changes from the documented replay keep the measurements about the scan matcher:
 
@@ -50,25 +50,25 @@ Two changes from the documented replay keep the measurements about the scan matc
 
 All values combine the 3 runs. "Scan to pose" is the time from the scan matcher's input scan to its output pose, both seen by the same recorder. Unlike each node's `exe_time_ms`, it covers the same work for all three.
 
-| | Autoware NDT | ndt_cuda | cuda_ndt_matcher |
-| --- | --- | --- | --- |
-| Poses per run | 281 | 286 | 284 |
-| Scan to pose, median (ms) | 3.33 | **0.74** | 3.40 |
-| Scan to pose, p95 (ms) | 5.81 | **1.02** | 4.00 |
-| Scan to pose, p99 (ms) | 8.29 | **1.16** | 15.63 |
-| Scan to pose, maximum (ms) | 12.56 | **1.60** | 20.21 |
-| `exe_time_ms`, median (ms) | 3.08 | 0.50 | 3.23 |
-| Initial pose search (s) | 3.07 | **0.55** | 1.59 |
-| Iterations, mean | 2.56 | 2.53 | 2.58 |
-| Transform probability, median | 5.857 | 5.903 | 5.881 |
-| NVTL, median | 3.102 | 3.115 | 3.108 |
-| NVTL, lowest (threshold 2.3) | 2.873 | 2.896 | 2.879 |
-| CPU while tracking (ms per second of bag time) | 192 | **75** | 92 |
-| CPU peak during the initial pose search (%, 100 = one core) | 402 | 56 | 101 |
-| GPU while tracking (ms per second of bag time) | 0 | **3.0** | 28.4 |
-| GPU time of the initial pose search (ms) | 0 | **365** | 1335 |
-| Video memory (MiB) | 0 | 86 | 404 |
-| Resident memory (MiB) | 66 | 228 | 527 |
+|                                                             | Autoware NDT | ndt_cuda | cuda_ndt_matcher |
+| ----------------------------------------------------------- | ------------ | -------- | ---------------- |
+| Poses per run                                               | 281          | 286      | 284              |
+| Scan to pose, median (ms)                                   | 3.33         | **0.74** | 3.40             |
+| Scan to pose, p95 (ms)                                      | 5.81         | **1.02** | 4.00             |
+| Scan to pose, p99 (ms)                                      | 8.29         | **1.16** | 15.63            |
+| Scan to pose, maximum (ms)                                  | 12.56        | **1.60** | 20.21            |
+| `exe_time_ms`, median (ms)                                  | 3.08         | 0.50     | 3.23             |
+| Initial pose search (s)                                     | 3.07         | **0.55** | 1.59             |
+| Iterations, mean                                            | 2.56         | 2.53     | 2.58             |
+| Transform probability, median                               | 5.857        | 5.903    | 5.881            |
+| NVTL, median                                                | 3.102        | 3.115    | 3.108            |
+| NVTL, lowest (threshold 2.3)                                | 2.873        | 2.896    | 2.879            |
+| CPU while tracking (ms per second of bag time)              | 192          | **75**   | 92               |
+| CPU peak during the initial pose search (%, 100 = one core) | 402          | 56       | 101              |
+| GPU while tracking (ms per second of bag time)              | 0            | **3.0**  | 28.4             |
+| GPU time of the initial pose search (ms)                    | 0            | **365**  | 1335             |
+| Video memory (MiB)                                          | 0            | 86       | 404              |
+| Resident memory (MiB)                                       | 66           | 228      | 527              |
 
 The poses per run differ because ndt_cuda finds the initial pose first and so also aligns the first scans.
 
@@ -94,11 +94,11 @@ The trace adds a little to the time per scan: the median scan-to-pose time of th
 
 The sample bag has no ground truth, so these values measure agreement with Autoware NDT, not accuracy. Poses are matched by scan time to the first run of Autoware NDT.
 
-| Run | Median (mm) | p95 (mm) | Maximum (mm) | Largest heading difference (°) |
-| --- | --- | --- | --- | --- |
-| Autoware NDT, runs 2 and 3 | 0.1 | 24.7–26.7 | 47.9–80.2 | 0.038 |
-| ndt_cuda, runs 1–3 | 3.9 | 23.6–25.4 | 42.9–59.8 | 0.040 |
-| cuda_ndt_matcher, runs 1–3 | 7.8 | 22.1–24.1 | 39.9–61.0 | 0.045 |
+| Run                        | Median (mm) | p95 (mm)  | Maximum (mm) | Largest heading difference (°) |
+| -------------------------- | ----------- | --------- | ------------ | ------------------------------ |
+| Autoware NDT, runs 2 and 3 | 0.1         | 24.7–26.7 | 47.9–80.2    | 0.038                          |
+| ndt_cuda, runs 1–3         | 3.9         | 23.6–25.4 | 42.9–59.8    | 0.040                          |
+| cuda_ndt_matcher, runs 1–3 | 7.8         | 22.1–24.1 | 39.9–61.0    | 0.045                          |
 
 The largest differences are of the same size as those between runs of Autoware NDT itself. The replay is not deterministic: small timing differences change the initial guesses of the EKF. The median differences of 4 and 8 mm are systematic: the GPU versions compute in single precision.
 

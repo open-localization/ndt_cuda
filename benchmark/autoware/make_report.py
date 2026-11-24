@@ -17,7 +17,7 @@ import sys
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402 (after matplotlib.use())
 
 MODES = {
     "builtin": ("Autoware NDT (CPU)", "#4c72b0"),
@@ -77,14 +77,20 @@ def load_trace(run_dir):
     align_start, align_end = align_service(f"{run_dir}/autoware.log")
     bin_seconds = float(busy[1]["time"]) - float(busy[0]["time"])
     # Bins that overlap the search, with half a second to spare for work that ends after its log line.
-    align = [r for r in busy if align_start - 0.5 < float(r["time"]) and float(r["time"]) - bin_seconds < align_end + 0.5]
+    align = [
+        r
+        for r in busy
+        if align_start - 0.5 < float(r["time"]) and float(r["time"]) - bin_seconds < align_end + 0.5
+    ]
     latency = values(read_csv(f"{run_dir}/poses.csv"), "latency_ms")
     return {
         "busy": [r for r in busy if start <= float(r["time"]) <= end],
         "start": start,
         "bin_seconds": bin_seconds,
         # The bag plays at 0.2x: GPU time per second of bag time is 5x that per second of replay.
-        "tracking_gpu_ms_per_bag_second": 5.0 * 10.0 * statistics.mean(values(tracking, "busy_percent")),
+        "tracking_gpu_ms_per_bag_second": 5.0
+        * 10.0
+        * statistics.mean(values(tracking, "busy_percent")),
         "align_gpu_ms": 10.0 * bin_seconds * sum(values(align, "busy_percent")),
         "latency_median": statistics.median(latency),
     }
@@ -105,7 +111,11 @@ def load_run(run_dir):
     cpu_seconds = 0.0
     for previous, current in zip(tracking, tracking[1:]):
         if number(current["ndt_cpu_percent"]) is not None:
-            cpu_seconds += number(current["ndt_cpu_percent"]) / 100.0 * (float(current["time"]) - float(previous["time"]))
+            cpu_seconds += (
+                number(current["ndt_cpu_percent"])
+                / 100.0
+                * (float(current["time"]) - float(previous["time"]))
+            )
     return {
         "metrics": metrics,
         "poses": poses,
@@ -113,7 +123,9 @@ def load_run(run_dir):
         "start": start,
         "align_seconds": align_end - align_start if align_end else None,
         "tracking": tracking,
-        "tracking_cpu_ms_per_second": 1000.0 * cpu_seconds / (float(tracking[-1]["time"]) - float(tracking[0]["time"])),
+        "tracking_cpu_ms_per_second": 1000.0
+        * cpu_seconds
+        / (float(tracking[-1]["time"]) - float(tracking[0]["time"])),
     }
 
 
@@ -133,7 +145,9 @@ def summarize(runs):
         "latency_p99": percentile(latency, 99),
         "latency_max": max(latency),
         "exe_median": statistics.median(exe),
-        "iterations": statistics.mean(v for run in runs for v in values(run["metrics"], "iterations")),
+        "iterations": statistics.mean(
+            v for run in runs for v in values(run["metrics"], "iterations")
+        ),
         "tp": statistics.median(v for run in runs for v in values(run["metrics"], "tp")),
         "nvtl": statistics.median(v for run in runs for v in values(run["metrics"], "nvtl")),
         "nvtl_min": min(v for run in runs for v in values(run["metrics"], "nvtl")),
@@ -144,7 +158,8 @@ def summarize(runs):
         "machine_cpu": statistics.mean(values(window, "machine_cpu_percent")),
         "align_seconds": statistics.median(align) if align else None,
         # The bag plays at 0.2x: the scans arrive at 2 Hz instead of 10 Hz. CPU time per second of bag time is 5x that.
-        "tracking_cpu_ms_per_bag_second": 5.0 * statistics.mean(run["tracking_cpu_ms_per_second"] for run in runs),
+        "tracking_cpu_ms_per_bag_second": 5.0
+        * statistics.mean(run["tracking_cpu_ms_per_second"] for run in runs),
     }
 
 
@@ -154,8 +169,12 @@ def pose_differences(run, reference):
     for row in run["poses"]:
         other = by_stamp.get(round(float(row["stamp"]), 3))
         if other:
-            position.append(math.dist([float(row[k]) for k in "xyz"], [float(other[k]) for k in "xyz"]))
-            heading.append(abs((yaw(row) - yaw(other) + math.pi) % (2 * math.pi) - math.pi) * 180.0 / math.pi)
+            position.append(
+                math.dist([float(row[k]) for k in "xyz"], [float(other[k]) for k in "xyz"])
+            )
+            heading.append(
+                abs((yaw(row) - yaw(other) + math.pi) % (2 * math.pi) - math.pi) * 180.0 / math.pi
+            )
     return position, heading
 
 
@@ -165,7 +184,13 @@ def plot_latency(data, path):
         run = runs[0]
         rows = [r for r in run["poses"] if number(r["latency_ms"]) is not None]
         t0 = float(rows[0]["stamp"])
-        ax.plot([float(r["stamp"]) - t0 for r in rows], [float(r["latency_ms"]) for r in rows], label=MODES[mode][0], color=MODES[mode][1], linewidth=1)
+        ax.plot(
+            [float(r["stamp"]) - t0 for r in rows],
+            [float(r["latency_ms"]) for r in rows],
+            label=MODES[mode][0],
+            color=MODES[mode][1],
+            linewidth=1,
+        )
     ax.set_yscale("log")
     ax.set_xlabel("Bag time (s)")
     ax.set_ylabel("Scan in to pose out (ms, log scale)")
@@ -177,11 +202,23 @@ def plot_latency(data, path):
 
 def plot_resources(data, traces, path):
     fig, axes = plt.subplots(3, 1, figsize=(9, 7.5), sharex=True)
-    for ax, (key, title) in zip(axes[::2], [("ndt_cpu_percent", "NDT process CPU (%, 100 = one core)"), ("ndt_vram_mib", "NDT process video memory (MiB)")]):
+    for ax, (key, title) in zip(
+        axes[::2],
+        [
+            ("ndt_cpu_percent", "NDT process CPU (%, 100 = one core)"),
+            ("ndt_vram_mib", "NDT process video memory (MiB)"),
+        ],
+    ):
         for mode, runs in data.items():
             run = runs[0]
             rows = [r for r in run["window"] if number(r[key]) is not None]
-            ax.plot([float(r["time"]) - run["start"] for r in rows], [float(r[key]) for r in rows], label=MODES[mode][0], color=MODES[mode][1], linewidth=1.2)
+            ax.plot(
+                [float(r["time"]) - run["start"] for r in rows],
+                [float(r[key]) for r in rows],
+                label=MODES[mode][0],
+                color=MODES[mode][1],
+                linewidth=1.2,
+            )
         ax.set_ylabel(title, fontsize=9)
         ax.grid(True, alpha=0.3)
     # GPU busy share from the traces, averaged over 1 s of replay (5 scans) and on a log scale: tracking needs less
@@ -192,7 +229,7 @@ def plot_resources(data, traces, path):
         rows = trace["busy"]
         times, shares = [], []
         for i in range(0, len(rows) - group + 1, group):
-            chunk = rows[i:i + group]
+            chunk = rows[i : i + group]
             times.append(float(chunk[-1]["time"]) - trace["start"])
             shares.append(max(statistics.mean(float(r["busy_percent"]) for r in chunk), 0.005))
         ax.plot(times, shares, label=MODES[mode][0], color=MODES[mode][1], linewidth=1.2)
@@ -208,12 +245,24 @@ def plot_resources(data, traces, path):
 
 def plot_summary(summary, traces, path):
     fig, axes = plt.subplots(1, 4, figsize=(13, 3.8))
-    titles = ("Median scan-to-pose time (ms)", "NDT CPU while tracking\n(ms per second of bag time)",
-              "NDT GPU while tracking\n(ms per second of bag time)", "NDT video memory (MiB)")
-    columns = [{m: summary[m]["latency_median"] for m in summary}, {m: summary[m]["tracking_cpu_ms_per_bag_second"] for m in summary},
-               {m: traces[m]["tracking_gpu_ms_per_bag_second"] if m in traces else 0.0 for m in summary}, {m: summary[m]["vram"] for m in summary}]
+    titles = (
+        "Median scan-to-pose time (ms)",
+        "NDT CPU while tracking\n(ms per second of bag time)",
+        "NDT GPU while tracking\n(ms per second of bag time)",
+        "NDT video memory (MiB)",
+    )
+    columns = [
+        {m: summary[m]["latency_median"] for m in summary},
+        {m: summary[m]["tracking_cpu_ms_per_bag_second"] for m in summary},
+        {m: traces[m]["tracking_gpu_ms_per_bag_second"] if m in traces else 0.0 for m in summary},
+        {m: summary[m]["vram"] for m in summary},
+    ]
     for ax, column, title in zip(axes, columns, titles):
-        bars = ax.bar([MODES[m][0].replace(" (", "\n(") for m in column], list(column.values()), color=[MODES[m][1] for m in column])
+        bars = ax.bar(
+            [MODES[m][0].replace(" (", "\n(") for m in column],
+            list(column.values()),
+            color=[MODES[m][1] for m in column],
+        )
         ax.bar_label(bars, fmt="%.1f", fontsize=9)
         ax.set_title(title, fontsize=10)
         ax.tick_params(axis="x", labelsize=8)
@@ -233,8 +282,11 @@ def main(results, figures, names, trace_name="trace"):
         if runs:
             data[mode] = runs
 
-    traces = {mode: load_trace(f"{results}/{mode}/{trace_name}") for mode in MODES
-              if os.path.exists(f"{results}/{mode}/{trace_name}/gpu_busy.csv")}
+    traces = {
+        mode: load_trace(f"{results}/{mode}/{trace_name}")
+        for mode in MODES
+        if os.path.exists(f"{results}/{mode}/{trace_name}/gpu_busy.csv")
+    }
     summary = {mode: summarize(runs) for mode, runs in data.items()}
     for mode, s in summary.items():
         print(f"\n{mode} ({len(data[mode])} runs)")
@@ -243,8 +295,10 @@ def main(results, figures, names, trace_name="trace"):
 
     print("\nTraced runs (Nsight Systems)")
     for mode, trace in traces.items():
-        print(f"  {mode}: GPU while tracking {trace['tracking_gpu_ms_per_bag_second']:.2f} ms per bag second, "
-              f"initial pose search {trace['align_gpu_ms']:.0f} ms of GPU time, scan-to-pose median {trace['latency_median']:.2f} ms")
+        print(
+            f"  {mode}: GPU while tracking {trace['tracking_gpu_ms_per_bag_second']:.2f} ms per bag second, "
+            f"initial pose search {trace['align_gpu_ms']:.0f} ms of GPU time, scan-to-pose median {trace['latency_median']:.2f} ms"
+        )
 
     print("\nDifference from the first run of Autoware NDT, matched by scan time")
     reference = data["builtin"][0]
@@ -253,7 +307,9 @@ def main(results, figures, names, trace_name="trace"):
             if mode == "builtin" and i == 0:
                 continue
             position, heading = pose_differences(run, reference)
-            print(f"  {mode} run {i + 1}: scans {len(position)}, position median {statistics.median(position) * 1000:.1f} mm, p95 {percentile(position, 95) * 1000:.1f} mm, max {max(position) * 1000:.1f} mm, heading max {max(heading):.3f} deg")
+            print(
+                f"  {mode} run {i + 1}: scans {len(position)}, position median {statistics.median(position) * 1000:.1f} mm, p95 {percentile(position, 95) * 1000:.1f} mm, max {max(position) * 1000:.1f} mm, heading max {max(heading):.3f} deg"
+            )
 
     os.makedirs(figures, exist_ok=True)
     plot_latency(data, f"{figures}/latency.png")

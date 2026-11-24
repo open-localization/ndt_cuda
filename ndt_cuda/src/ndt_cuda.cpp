@@ -10,4 +10,5 @@ template class ndt_cuda::NormalDistributionsTransformCUDA<pcl::PointXYZRGB, pcl:
 
 template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<pcl::PointXYZ, pcl::PointXYZ>;
 template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<pcl::PointXYZI, pcl::PointXYZI>;
-template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<pcl::PointXYZRGB, pcl::PointXYZRGB>;
+template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<
+  pcl::PointXYZRGB, pcl::PointXYZRGB>;

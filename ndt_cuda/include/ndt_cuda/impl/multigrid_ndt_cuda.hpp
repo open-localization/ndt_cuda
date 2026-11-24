@@ -50,11 +50,14 @@
  *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
  *
- *  Derived from pclomp::MultiGridNormalDistributionsTransform of tier4/ndt_omp (Apache License 2.0, see above), which
- *  derives from pcl::NormalDistributionsTransform (BSD License, this notice).
+ *  Derived from pclomp::MultiGridNormalDistributionsTransform of tier4/ndt_omp (Apache License 2.0,
+ * see above), which derives from pcl::NormalDistributionsTransform (BSD License, this notice).
  */
 
 #pragma once
+
+#include <ndt_cuda/impl/voxel_grid_covariance.hpp>
+#include <ndt_cuda/multigrid_ndt_cuda.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -62,11 +65,11 @@
 #include <limits>
 #include <stdexcept>
 
-#include <ndt_cuda/impl/voxel_grid_covariance.hpp>
-#include <ndt_cuda/multigrid_ndt_cuda.hpp>
-
 template <typename PointSource, typename PointTarget>
-ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::MultiGridNormalDistributionsTransformCUDA(int device) : Base(device) {
+ndt_cuda::MultiGridNormalDistributionsTransformCUDA<
+  PointSource, PointTarget>::MultiGridNormalDistributionsTransformCUDA(int device)
+: Base(device)
+{
   this->reg_name_ = "MultiGridNormalDistributionsTransformCUDA";
   this->search_method = KDTREE;
   this->use_line_search_ = false;
@@ -74,13 +77,17 @@ ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::M
 }
 
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::setInputTarget(const PointCloudTargetConstPtr& cloud) {
+void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::setInputTarget(
+  const PointCloudTargetConstPtr & cloud)
+{
   addTarget(cloud, "default");
   createVoxelKdtree();
 }
 
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::addTarget(const PointCloudTargetConstPtr& cloud, const std::string& target_id) {
+void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::addTarget(
+  const PointCloudTargetConstPtr & cloud, const std::string & target_id)
+{
   pcl::Registration<PointSource, PointTarget>::setInputTarget(cloud);
 
   TargetGrid grid;
@@ -110,11 +117,13 @@ void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarge
 }
 
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::createVoxelKdtree() {
+void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<
+  PointSource, PointTarget>::createVoxelKdtree()
+{
   target_cloud_updated_ = false;
 
   voxel_means_.clear();
-  for (const auto& [id, tile] : tiles_) {
+  for (const auto & [id, tile] : tiles_) {
     (void)id;
     for (std::size_t i = 0; i < tile->flags.size(); i++) {
       PointTarget point;
@@ -130,14 +139,20 @@ void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarge
 }
 
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::mergeTiles(VoxelGridHost& grid) const {
+void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::mergeTiles(
+  VoxelGridHost & grid) const
+{
   grid.clear();
 
   std::size_t num_voxels = 0;
-  int min_b[3] = {std::numeric_limits<int>::max(), std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
-  int max_b[3] = {std::numeric_limits<int>::lowest(), std::numeric_limits<int>::lowest(), std::numeric_limits<int>::lowest()};
+  int min_b[3] = {
+    std::numeric_limits<int>::max(), std::numeric_limits<int>::max(),
+    std::numeric_limits<int>::max()};
+  int max_b[3] = {
+    std::numeric_limits<int>::lowest(), std::numeric_limits<int>::lowest(),
+    std::numeric_limits<int>::lowest()};
   const float leaf_size = tiles_.empty() ? resolution_ : tiles_.begin()->second->leaf_size;
-  for (const auto& [id, tile] : tiles_) {
+  for (const auto & [id, tile] : tiles_) {
     (void)id;
     if (tile->leaf_size != leaf_size) {
       throw std::invalid_argument("[ndt_cuda] the loaded map tiles have different resolutions");
@@ -161,7 +176,8 @@ void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarge
     divb_mul[d] = divisions;
     divisions *= static_cast<std::int64_t>(max_b[d]) - min_b[d] + 1;
     if (divisions > std::numeric_limits<std::int32_t>::max()) {
-      throw std::invalid_argument("[ndt_cuda] the loaded map tiles are too far apart for the voxel keys");
+      throw std::invalid_argument(
+        "[ndt_cuda] the loaded map tiles are too far apart for the voxel keys");
     }
     grid.divb_mul[d] = static_cast<int>(divb_mul[d]);
   }
@@ -170,11 +186,14 @@ void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarge
   grid.means.reserve(num_voxels * 3);
   grid.icovs.reserve(num_voxels * 6);
   grid.flags.reserve(num_voxels);
-  for (const auto& [id, tile] : tiles_) {
+  for (const auto & [id, tile] : tiles_) {
     (void)id;
     for (std::size_t i = 0; i < tile->flags.size(); i++) {
-      grid.keys.push_back(static_cast<std::int32_t>(
-        (tile->cells[3 * i] - min_b[0]) * divb_mul[0] + (tile->cells[3 * i + 1] - min_b[1]) * divb_mul[1] + (tile->cells[3 * i + 2] - min_b[2]) * divb_mul[2]));
+      grid.keys.push_back(
+        static_cast<std::int32_t>(
+          (tile->cells[3 * i] - min_b[0]) * divb_mul[0] +
+          (tile->cells[3 * i + 1] - min_b[1]) * divb_mul[1] +
+          (tile->cells[3 * i + 2] - min_b[2]) * divb_mul[2]));
     }
     grid.means.insert(grid.means.end(), tile->means.begin(), tile->means.end());
     grid.icovs.insert(grid.icovs.end(), tile->icovs.begin(), tile->icovs.end());
@@ -183,23 +202,29 @@ void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarge
 }
 
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::uploadTarget() const {
+void ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::uploadTarget()
+  const
+{
   VoxelGridHost grid;
   mergeTiles(grid);
   backend_->setTarget(grid);
 }
 
 template <typename PointSource, typename PointTarget>
-bool ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::finishIteration(double step_length) {
+bool ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::finishIteration(
+  double step_length)
+{
   nr_iterations_++;
   return nr_iterations_ >= max_iterations_ || std::fabs(step_length) < transformation_epsilon_;
 }
 
 template <typename PointSource, typename PointTarget>
-std::vector<std::string> ndt_cuda::MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>::getCurrentMapIDs() const {
+std::vector<std::string> ndt_cuda::MultiGridNormalDistributionsTransformCUDA<
+  PointSource, PointTarget>::getCurrentMapIDs() const
+{
   std::vector<std::string> ids;
   ids.reserve(tiles_.size());
-  for (const auto& [id, tile] : tiles_) {
+  for (const auto & [id, tile] : tiles_) {
     (void)tile;
     ids.push_back(id);
   }

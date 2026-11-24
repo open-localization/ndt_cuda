@@ -35,41 +35,47 @@
  *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
  *
- *  Derived from pcl/registration/impl/ndt.hpp and pclomp/ndt_omp_impl.hpp (koide3/ndt_omp, BSD 2-Clause,
- *  Copyright (c) 2019, k.koide). The Newton / More-Thuente optimization is unchanged; computeDerivatives()
- *  and calculateScore() delegate the per-point work to the GPU.
+ *  Derived from pcl/registration/impl/ndt.hpp and pclomp/ndt_omp_impl.hpp (koide3/ndt_omp, BSD
+ * 2-Clause, Copyright (c) 2019, k.koide). The Newton / More-Thuente optimization is unchanged;
+ * computeDerivatives() and calculateScore() delegate the per-point work to the GPU.
  */
 
 #pragma once
-
-#include <cmath>
-#include <stdexcept>
-
-#include <pcl/common/transforms.h>
 
 #include <ndt_cuda/angle_derivatives.hpp>
 #include <ndt_cuda/impl/voxel_grid_covariance.hpp>
 #include <ndt_cuda/ndt_cuda.hpp>
 
+#include <pcl/common/transforms.h>
+
+#include <cmath>
+#include <stdexcept>
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
-ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::NormalDistributionsTransformCUDA(int device) : search_method(DIRECT7) {
+ndt_cuda::NormalDistributionsTransformCUDA<
+  PointSource, PointTarget>::NormalDistributionsTransformCUDA(int device)
+: search_method(DIRECT7)
+{
   reg_name_ = "NormalDistributionsTransformCUDA";
   transformation_epsilon_ = 0.1;
   max_iterations_ = 35;
   updateGaussParams();
 
   if (GpuBackend::deviceCount() <= 0) {
-    throw std::runtime_error("[ndt_cuda::NormalDistributionsTransformCUDA] no CUDA capable device found");
+    throw std::runtime_error(
+      "[ndt_cuda::NormalDistributionsTransformCUDA] no CUDA capable device found");
   }
   backend_ = std::make_unique<GpuBackend>(device);
 }
 
 template <typename PointSource, typename PointTarget>
-ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::~NormalDistributionsTransformCUDA() = default;
+ndt_cuda::NormalDistributionsTransformCUDA<
+  PointSource, PointTarget>::~NormalDistributionsTransformCUDA() = default;
 
 template <typename PointSource, typename PointTarget>
-ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::NormalDistributionsTransformCUDA(const NormalDistributionsTransformCUDA& other)
+ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::
+  NormalDistributionsTransformCUDA(const NormalDistributionsTransformCUDA & other)
 : pcl::Registration<PointSource, PointTarget>(other),
   search_method(other.search_method),
   target_cells_(other.target_cells_),
@@ -89,14 +95,23 @@ ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::NormalDist
   hessian_(other.hessian_),
   transformation_array_(other.transformation_array_),
   transform_probability_array_(other.transform_probability_array_),
-  nearest_voxel_transformation_likelihood_array_(other.nearest_voxel_transformation_likelihood_array_),
+  nearest_voxel_transformation_likelihood_array_(
+    other.nearest_voxel_transformation_likelihood_array_),
   backend_(std::make_unique<GpuBackend>(other.backend_->device())),
-  // Share the map that other uploaded: no upload, and in particular none in the first align() of the copy.
-  target_upload_pending_(other.target_ != nullptr &&
-                         (other.target_upload_pending_ || other.backend_->numTargetVoxels() == 0 || !backend_->shareTarget(*other.backend_))) {}
+  // Share the map that other uploaded: no upload, and in particular none in the first align() of
+  // the copy.
+  target_upload_pending_(
+    other.target_ != nullptr &&
+    (other.target_upload_pending_ || other.backend_->numTargetVoxels() == 0 ||
+     !backend_->shareTarget(*other.backend_)))
+{
+}
 
 template <typename PointSource, typename PointTarget>
-ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>& ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::operator=(const NormalDistributionsTransformCUDA& other) {
+ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget> &
+ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::operator=(
+  const NormalDistributionsTransformCUDA & other)
+{
   if (this == &other) {
     return *this;
   }
@@ -119,16 +134,21 @@ ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>& ndt_cuda::
   hessian_ = other.hessian_;
   transformation_array_ = other.transformation_array_;
   transform_probability_array_ = other.transform_probability_array_;
-  nearest_voxel_transformation_likelihood_array_ = other.nearest_voxel_transformation_likelihood_array_;
+  nearest_voxel_transformation_likelihood_array_ =
+    other.nearest_voxel_transformation_likelihood_array_;
   backend_ = std::make_unique<GpuBackend>(other.backend_->device());
-  // Share the map that other uploaded: no upload, and in particular none in the first align() of the copy.
-  target_upload_pending_ = other.target_ != nullptr &&
-                           (other.target_upload_pending_ || other.backend_->numTargetVoxels() == 0 || !backend_->shareTarget(*other.backend_));
+  // Share the map that other uploaded: no upload, and in particular none in the first align() of
+  // the copy.
+  target_upload_pending_ = other.target_ != nullptr && (other.target_upload_pending_ ||
+                                                        other.backend_->numTargetVoxels() == 0 ||
+                                                        !backend_->shareTarget(*other.backend_));
   return *this;
 }
 
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::setParams(const NdtParams& params) {
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::setParams(
+  const NdtParams & params)
+{
   transformation_epsilon_ = params.trans_epsilon;
   step_size_ = params.step_size;
   max_iterations_ = params.max_iterations;
@@ -140,7 +160,9 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::setPa
 }
 
 template <typename PointSource, typename PointTarget>
-ndt_cuda::NdtParams ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::getParams() const {
+ndt_cuda::NdtParams
+ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::getParams() const
+{
   NdtParams params;
   params.trans_epsilon = transformation_epsilon_;
   params.step_size = step_size_;
@@ -154,47 +176,58 @@ ndt_cuda::NdtParams ndt_cuda::NormalDistributionsTransformCUDA<PointSource, Poin
 }
 
 template <typename PointSource, typename PointTarget>
-ndt_cuda::NdtResult ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::getResult() const {
+ndt_cuda::NdtResult
+ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::getResult() const
+{
   NdtResult result;
   result.pose = final_transformation_;
   result.transformation_array = transformation_array_;
   result.transform_probability = static_cast<float>(trans_probability_);
   result.transform_probability_array = transform_probability_array_;
-  result.nearest_voxel_transformation_likelihood = static_cast<float>(nearest_voxel_transformation_likelihood_);
-  result.nearest_voxel_transformation_likelihood_array = nearest_voxel_transformation_likelihood_array_;
+  result.nearest_voxel_transformation_likelihood =
+    static_cast<float>(nearest_voxel_transformation_likelihood_);
+  result.nearest_voxel_transformation_likelihood_array =
+    nearest_voxel_transformation_likelihood_array_;
   result.iteration_num = nr_iterations_;
   result.hessian = hessian_;
   return result;
 }
 
 template <typename PointSource, typename PointTarget>
-std::size_t ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::getNumTargetVoxels() const {
+std::size_t
+ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::getNumTargetVoxels() const
+{
   prepareTarget();
   return backend_->numTargetVoxels();
 }
 
 template <typename PointSource, typename PointTarget>
-int ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::getDevice() const {
+int ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::getDevice() const
+{
   return backend_->device();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::updateGaussParams() {
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::updateGaussParams()
+{
   // Initializes the gaussian fitting parameters (eq. 6.8) [Magnusson 2009]
   const double gauss_c1 = 10.0 * (1 - outlier_ratio_);
   const double gauss_c2 = outlier_ratio_ / std::pow(resolution_, 3);
   gauss_d3_ = -std::log(gauss_c2);
   gauss_d1_ = -std::log(gauss_c1 + gauss_c2) - gauss_d3_;
-  gauss_d2_ = -2 * std::log((-std::log(gauss_c1 * std::exp(-0.5) + gauss_c2) - gauss_d3_) / gauss_d1_);
+  gauss_d2_ =
+    -2 * std::log((-std::log(gauss_c1 * std::exp(-0.5) + gauss_c2) - gauss_d3_) / gauss_d1_);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::packPoints(const PointCloudSource& cloud, std::vector<float>& xyzw) {
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::packPoints(
+  const PointCloudSource & cloud, std::vector<float> & xyzw)
+{
   xyzw.resize(cloud.points.size() * 4);
-  float* dst = xyzw.data();
-  for (const auto& pt : cloud.points) {
+  float * dst = xyzw.data();
+  for (const auto & pt : cloud.points) {
     dst[0] = pt.x;
     dst[1] = pt.y;
     dst[2] = pt.z;
@@ -205,7 +238,10 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::packP
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
-Eigen::Matrix4f ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::vectorToMatrix(const Eigen::Matrix<double, 6, 1>& x) {
+Eigen::Matrix4f
+ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::vectorToMatrix(
+  const Eigen::Matrix<double, 6, 1> & x)
+{
   Eigen::Matrix4f trans;
   convertTransform(x, trans);
   return trans;
@@ -213,7 +249,8 @@ Eigen::Matrix4f ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTar
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::init() {
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::init()
+{
   target_cells_.setLeafSize(resolution_);
   target_cells_.build(*target_);
 
@@ -222,14 +259,16 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::init(
 }
 
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::uploadTarget() const {
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::uploadTarget() const
+{
   VoxelGridHost grid;
   target_cells_.exportTo(grid);
   backend_->setTarget(grid);
 }
 
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::prepareTarget() const {
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::prepareTarget() const
+{
   if (target_upload_pending_) {
     uploadTarget();
     target_upload_pending_ = false;
@@ -237,15 +276,20 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::prepa
 }
 
 template <typename PointSource, typename PointTarget>
-bool ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::finishIteration(double step_length) {
-  const bool finished = nr_iterations_ > max_iterations_ || (nr_iterations_ && std::fabs(step_length) < transformation_epsilon_);
+bool ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::finishIteration(
+  double step_length)
+{
+  const bool finished = nr_iterations_ > max_iterations_ ||
+                        (nr_iterations_ && std::fabs(step_length) < transformation_epsilon_);
   nr_iterations_++;
   return finished;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
-void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::computeTransformation(PointCloudSource& output, const Eigen::Matrix4f& guess) {
+void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::computeTransformation(
+  PointCloudSource & output, const Eigen::Matrix4f & guess)
+{
   nr_iterations_ = 0;
   converged_ = false;
   prepareTarget();
@@ -285,11 +329,13 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::compu
   Eigen::Matrix<double, 6, 1> p, delta_p, score_gradient;
   const Eigen::Vector3f init_translation = eig_transformation.translation();
   const Eigen::Vector3f init_rotation = eig_transformation.rotation().eulerAngles(0, 1, 2);
-  p << init_translation(0), init_translation(1), init_translation(2), init_rotation(0), init_rotation(1), init_rotation(2);
+  p << init_translation(0), init_translation(1), init_translation(2), init_rotation(0),
+    init_rotation(1), init_rotation(2);
 
   Eigen::Matrix<double, 6, 6> hessian;
 
-  // Calculate derivatives of initial transform vector, subsequent derivative calculations are done in the step length determination.
+  // Calculate derivatives of initial transform vector, subsequent derivative calculations are done
+  // in the step length determination.
   double score = computeDerivatives(score_gradient, hessian, p);
 
   while (!converged_) {
@@ -297,7 +343,8 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::compu
     previous_transformation_ = transformation_;
 
     // Solve for decent direction using newton method, line 23 in Algorithm 2 [Magnusson 2009]
-    Eigen::JacobiSVD<Eigen::Matrix<double, 6, 6>> sv(hessian, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::JacobiSVD<Eigen::Matrix<double, 6, 6>> sv(
+      hessian, Eigen::ComputeFullU | Eigen::ComputeFullV);
     // Negative for maximization as opposed to minimization
     delta_p = sv.solve(-score_gradient);
 
@@ -313,7 +360,9 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::compu
     }
 
     delta_p.normalize();
-    delta_p_norm = computeStepLengthMT(p, delta_p, delta_p_norm, step_size_, transformation_epsilon_ / 2, score, score_gradient, hessian);
+    delta_p_norm = computeStepLengthMT(
+      p, delta_p, delta_p_norm, step_size_, transformation_epsilon_ / 2, score, score_gradient,
+      hessian);
     delta_p *= delta_p_norm;
 
     transformation_ = vectorToMatrix(delta_p);
@@ -335,8 +384,8 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::compu
   // The aligned cloud is only needed once, at the end.
   pcl::transformPointCloud(*input_, output, final_transformation_);
 
-  // Store transformation probability. The relative differences within each scan registration are accurate
-  // but the normalization constants need to be modified for it to be globally accurate
+  // Store transformation probability. The relative differences within each scan registration are
+  // accurate but the normalization constants need to be modified for it to be globally accurate
   trans_probability_ = score / static_cast<double>(input_->points.size());
   hessian_ = hessian;
 }
@@ -344,11 +393,9 @@ void ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::compu
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
 double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::computeDerivatives(
-  Eigen::Matrix<double, 6, 1>& score_gradient,
-  Eigen::Matrix<double, 6, 6>& hessian,
-  const Eigen::Matrix<double, 6, 1>& p,
-  bool compute_hessian,
-  bool record) {
+  Eigen::Matrix<double, 6, 1> & score_gradient, Eigen::Matrix<double, 6, 6> & hessian,
+  const Eigen::Matrix<double, 6, 1> & p, bool compute_hessian, bool record)
+{
   // Precompute Angular Derivatives (eq. 6.19 and 6.21)[Magnusson 2009]
   computeAngleDerivatives(p, compute_hessian, j_ang_, h_ang_);
 
@@ -376,7 +423,8 @@ double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::com
 
   double score = result.score;
   if (regularization_pose_) {
-    // Quadratic penalty on the longitudinal distance to the regularization pose, as in tier4/ndt_omp.
+    // Quadratic penalty on the longitudinal distance to the regularization pose, as in
+    // tier4/ndt_omp.
     const float dx = (*regularization_pose_)(0, 3) - static_cast<float>(p(0));
     const float dy = (*regularization_pose_)(1, 3) - static_cast<float>(p(1));
     const float sin_yaw = static_cast<float>(std::sin(p(5)));
@@ -394,9 +442,13 @@ double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::com
   }
 
   if (record) {
-    nearest_voxel_transformation_likelihood_ = result.points_with_neighbors > 0.0 ? result.nearest_voxel_score / result.points_with_neighbors : 0.0;
-    nearest_voxel_transformation_likelihood_array_.push_back(static_cast<float>(nearest_voxel_transformation_likelihood_));
-    transform_probability_array_.push_back(static_cast<float>(score / static_cast<double>(input_->points.size())));
+    nearest_voxel_transformation_likelihood_ =
+      result.points_with_neighbors > 0.0 ? result.nearest_voxel_score / result.points_with_neighbors
+                                         : 0.0;
+    nearest_voxel_transformation_likelihood_array_.push_back(
+      static_cast<float>(nearest_voxel_transformation_likelihood_));
+    transform_probability_array_.push_back(
+      static_cast<float>(score / static_cast<double>(input_->points.size())));
   }
   return score;
 }
@@ -404,15 +456,9 @@ double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::com
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
 bool ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::updateIntervalMT(
-  double& a_l,
-  double& f_l,
-  double& g_l,
-  double& a_u,
-  double& f_u,
-  double& g_u,
-  double a_t,
-  double f_t,
-  double g_t) {
+  double & a_l, double & f_l, double & g_l, double & a_u, double & f_u, double & g_u, double a_t,
+  double f_t, double g_t)
+{
   // Case U1 in Update Algorithm and Case a in Modified Update Algorithm [More, Thuente 1994]
   if (f_t > f_l) {
     a_u = a_t;
@@ -446,15 +492,9 @@ bool ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::updat
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
 double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::trialValueSelectionMT(
-  double a_l,
-  double f_l,
-  double g_l,
-  double a_u,
-  double f_u,
-  double g_u,
-  double a_t,
-  double f_t,
-  double g_t) {
+  double a_l, double f_l, double g_l, double a_u, double f_u, double g_u, double a_t, double f_t,
+  double g_t)
+{
   // Case 1 in Trial Value Selection [More, Thuente 1994]
   if (f_t > f_l) {
     // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l and g_t
@@ -529,14 +569,10 @@ double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::tri
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
 double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::computeStepLengthMT(
-  const Eigen::Matrix<double, 6, 1>& x,
-  Eigen::Matrix<double, 6, 1>& step_dir,
-  double step_init,
-  double step_max,
-  double step_min,
-  double& score,
-  Eigen::Matrix<double, 6, 1>& score_gradient,
-  Eigen::Matrix<double, 6, 6>& hessian) {
+  const Eigen::Matrix<double, 6, 1> & x, Eigen::Matrix<double, 6, 1> & step_dir, double step_init,
+  double step_max, double step_min, double & score, Eigen::Matrix<double, 6, 1> & score_gradient,
+  Eigen::Matrix<double, 6, 6> & hessian)
+{
   // Set the value of phi(0), Equation 1.3 [More, Thuente 1994]
   double phi_0 = -score;
   // Set the value of phi'(0), Equation 1.3 [More, Thuente 1994]
@@ -568,14 +604,16 @@ double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::com
   // Initial endpoints of Interval I,
   double a_l = 0, a_u = 0;
 
-  // Auxiliary function psi is used until I is determined ot be a closed interval, Equation 2.1 [More, Thuente 1994]
+  // Auxiliary function psi is used until I is determined ot be a closed interval, Equation 2.1
+  // [More, Thuente 1994]
   double f_l = auxiliaryFunction_PsiMT(a_l, phi_0, phi_0, d_phi_0, mu);
   double g_l = auxiliaryFunction_dPsiMT(d_phi_0, d_phi_0, mu);
 
   double f_u = auxiliaryFunction_PsiMT(a_u, phi_0, phi_0, d_phi_0, mu);
   double g_u = auxiliaryFunction_dPsiMT(d_phi_0, d_phi_0, mu);
 
-  // Check used to allow More-Thuente step length calculation to be skipped by making step_min == step_max
+  // Check used to allow More-Thuente step length calculation to be skipped by making step_min ==
+  // step_max
   bool interval_converged = !use_line_search_ || (step_max - step_min) < 0, open_interval = true;
 
   double a_t = step_init;
@@ -586,8 +624,9 @@ double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::com
 
   final_transformation_ = vectorToMatrix(x_t);
 
-  // Updates score, gradient and hessian.  Hessian calculation is unnecessary but testing showed that most step calculations use the
-  // initial step suggestion and recalculation the reusable portions of the hessian would intail more computation time.
+  // Updates score, gradient and hessian.  Hessian calculation is unnecessary but testing showed
+  // that most step calculations use the initial step suggestion and recalculation the reusable
+  // portions of the hessian would intail more computation time.
   score = computeDerivatives(score_gradient, hessian, x_t, true);
 
   // Calculate phi(alpha_t)
@@ -600,8 +639,11 @@ double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::com
   // Calculate psi'(alpha_t)
   double d_psi_t = auxiliaryFunction_dPsiMT(d_phi_t, d_phi_0, mu);
 
-  // Iterate until max number of iterations, interval convergence or a value satisfies the sufficient decrease, Equation 1.1, and curvature condition, Equation 1.2 [More, Thuente 1994]
-  while (!interval_converged && step_iterations < max_step_iterations && !(psi_t <= 0 /*Sufficient Decrease*/ && d_phi_t <= -nu * d_phi_0 /*Curvature Condition*/)) {
+  // Iterate until max number of iterations, interval convergence or a value satisfies the
+  // sufficient decrease, Equation 1.1, and curvature condition, Equation 1.2 [More, Thuente 1994]
+  while (
+    !interval_converged && step_iterations < max_step_iterations &&
+    !(psi_t <= 0 /*Sufficient Decrease*/ && d_phi_t <= -nu * d_phi_0 /*Curvature Condition*/)) {
     // Use auxiliary function if interval I is not closed
     if (open_interval) {
       a_t = trialValueSelectionMT(a_l, f_l, g_l, a_u, f_u, g_u, a_t, psi_t, d_psi_t);
@@ -666,39 +708,56 @@ double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::com
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
-double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::calculateScore(const PointCloudSource& trans_cloud) const {
+double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::calculateScore(
+  const PointCloudSource & trans_cloud) const
+{
   if (trans_cloud.points.empty()) {
     return 0.0;
   }
   prepareTarget();
   packPoints(trans_cloud, packed_);
-  return backend_->calculateScore(packed_.data(), trans_cloud.points.size(), gauss_d1_, gauss_d2_, gauss_d3_, resolution_, static_cast<int>(search_method));
+  return backend_->calculateScore(
+    packed_.data(), trans_cloud.points.size(), gauss_d1_, gauss_d2_, gauss_d3_, resolution_,
+    static_cast<int>(search_method));
 }
 
 template <typename PointSource, typename PointTarget>
-double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::calculateTransformationProbability(const PointCloudSource& trans_cloud) const {
+double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::
+  calculateTransformationProbability(const PointCloudSource & trans_cloud) const
+{
   if (trans_cloud.points.empty()) {
     return 0.0;
   }
   prepareTarget();
   packPoints(trans_cloud, packed_);
-  const ProbabilityResult result = backend_->calculateProbability(packed_.data(), trans_cloud.points.size(), gauss_d1_, gauss_d2_, resolution_, static_cast<int>(search_method));
+  const ProbabilityResult result = backend_->calculateProbability(
+    packed_.data(), trans_cloud.points.size(), gauss_d1_, gauss_d2_, resolution_,
+    static_cast<int>(search_method));
   return result.score / static_cast<double>(trans_cloud.points.size());
 }
 
 template <typename PointSource, typename PointTarget>
-double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::calculateNearestVoxelTransformationLikelihood(const PointCloudSource& trans_cloud) const {
+double ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::
+  calculateNearestVoxelTransformationLikelihood(const PointCloudSource & trans_cloud) const
+{
   if (trans_cloud.points.empty()) {
     return 0.0;
   }
   prepareTarget();
   packPoints(trans_cloud, packed_);
-  const ProbabilityResult result = backend_->calculateProbability(packed_.data(), trans_cloud.points.size(), gauss_d1_, gauss_d2_, resolution_, static_cast<int>(search_method));
-  return result.points_with_neighbors > 0.0 ? result.nearest_voxel_score / result.points_with_neighbors : 0.0;
+  const ProbabilityResult result = backend_->calculateProbability(
+    packed_.data(), trans_cloud.points.size(), gauss_d1_, gauss_d2_, resolution_,
+    static_cast<int>(search_method));
+  return result.points_with_neighbors > 0.0
+           ? result.nearest_voxel_score / result.points_with_neighbors
+           : 0.0;
 }
 
 template <typename PointSource, typename PointTarget>
-pcl::PointCloud<pcl::PointXYZI> ndt_cuda::NormalDistributionsTransformCUDA<PointSource, PointTarget>::calculateNearestVoxelScoreEachPoint(const PointCloudSource& trans_cloud) const {
+pcl::PointCloud<pcl::PointXYZI> ndt_cuda::NormalDistributionsTransformCUDA<
+  PointSource,
+  PointTarget>::calculateNearestVoxelScoreEachPoint(const PointCloudSource & trans_cloud) const
+{
   pcl::PointCloud<pcl::PointXYZI> score_points;
   if (trans_cloud.points.empty()) {
     return score_points;
@@ -706,7 +765,9 @@ pcl::PointCloud<pcl::PointXYZI> ndt_cuda::NormalDistributionsTransformCUDA<Point
   prepareTarget();
   packPoints(trans_cloud, packed_);
   std::vector<float> scores(trans_cloud.points.size());
-  backend_->calculateNearestVoxelScores(packed_.data(), trans_cloud.points.size(), gauss_d1_, gauss_d2_, resolution_, static_cast<int>(search_method), scores.data());
+  backend_->calculateNearestVoxelScores(
+    packed_.data(), trans_cloud.points.size(), gauss_d1_, gauss_d2_, resolution_,
+    static_cast<int>(search_method), scores.data());
   for (std::size_t i = 0; i < scores.size(); i++) {
     if (scores[i] < 0.0f) continue;
     pcl::PointXYZI point;

@@ -5,8 +5,8 @@ import csv
 import sys
 
 from rclpy.serialization import deserialize_message
-from rosidl_runtime_py.utilities import get_message
 import rosbag2_py
+from rosidl_runtime_py.utilities import get_message
 
 PREFIX = "/localization/pose_estimator/"
 SCAN_TOPIC = "/localization/util/downsample/pointcloud"
@@ -37,7 +37,7 @@ def main(output_dir):
             continue
         if not topic.startswith(PREFIX):
             continue
-        name = topic[len(PREFIX):]
+        name = topic[len(PREFIX) :]
         msg = deserialize_message(data, types[topic])
         if name in SCALARS:
             scalars[name].append((msg.stamp.sec + msg.stamp.nanosec * 1e-9, msg.data))

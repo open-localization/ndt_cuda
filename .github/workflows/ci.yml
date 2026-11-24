@@ -42,9 +42,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - cuda: "11.8.0"
+          - cuda: 11.8.0
             image: nvidia/cuda:11.8.0-devel-ubuntu22.04
-          - cuda: "12.6.3"
+          - cuda: 12.6.3
             image: nvidia/cuda:12.6.3-devel-ubuntu24.04
     container: ${{ matrix.image }}
     steps:
