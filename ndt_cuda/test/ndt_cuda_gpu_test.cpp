@@ -247,6 +247,9 @@ int main(int argc, char ** argv)
   check(
     assigned.hasConverged() && assign_diff == 0.0f, "assignment: same result as the original",
     assign_diff, 0.0);
+  const bool own_indices =
+    copied.getIndices() != clean.getIndices() && assigned.getIndices() != clean.getIndices();
+  check(own_indices, "copy and assignment: own point indices", own_indices ? 0.0 : 1.0, 0.0);
 
   // A target without usable voxels must not be reported as a successful alignment.
   Cloud::Ptr only_nan(new Cloud);
