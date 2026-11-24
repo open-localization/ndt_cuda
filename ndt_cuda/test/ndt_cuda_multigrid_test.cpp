@@ -19,8 +19,6 @@
 // usage: ndt_cuda_multigrid_test [data_dir]      exit code 77 (reported as skipped by ctest) if no
 // GPU is available
 
-#include <ndt_cuda/pclomp_compat.hpp>  // after the tier4/ndt_omp headers, as documented
-
 #include <multigrid_pclomp/multigrid_ndt_omp.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
@@ -38,6 +36,10 @@
 #include <thread>
 #include <type_traits>
 #include <vector>
+
+// clang-format off
+#include <ndt_cuda/pclomp_compat.hpp>  // after the tier4/ndt_omp headers, as documented
+// clang-format on
 
 using PointT = pcl::PointXYZ;
 using Cloud = pcl::PointCloud<PointT>;

@@ -19,7 +19,6 @@
 #include <ndt_cuda/angle_derivatives.hpp>
 #include <ndt_cuda/gpu_backend.hpp>
 #include <ndt_cuda/ndt_cuda.hpp>
-#include <ndt_cuda/pclomp_compat.hpp>  // after <pclomp/ndt_omp.h>, as documented
 #include <ndt_cuda/voxel_grid_covariance.hpp>
 
 #include <pcl/common/transforms.h>
@@ -36,6 +35,10 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+// clang-format off
+#include <ndt_cuda/pclomp_compat.hpp>  // after <pclomp/ndt_omp.h>, as documented
+// clang-format on
 
 using PointT = pcl::PointXYZ;
 using Cloud = pcl::PointCloud<PointT>;
