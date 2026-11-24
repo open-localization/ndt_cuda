@@ -2,14 +2,41 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
 # GitHub hosted runners have no GPU: the jobs compile the CUDA library and run the GPU-less validation test,
 # which executes the exact kernel arithmetic on the CPU and compares it with koide3/ndt_omp.
 jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.filter.outputs.build == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            build:
+              - src/**
+              - include/**
+              - test/**
+              - data/**
+              - cmake/**
+              - examples/**
+              - benchmark/*.cpp
+              - CMakeLists.txt
+              - package.xml
+              - docker/**
+              - .github/workflows/ci.yml
+
   cmake:
     name: CMake / CUDA ${{ matrix.cuda }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -42,6 +69,8 @@ jobs:
 
   ros2:
     name: ROS 2 ${{ matrix.distro }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -54,6 +83,8 @@ jobs:
 
   tests-without-cuda:
     name: Tests without CUDA toolkit
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -64,3 +95,13 @@ jobs:
           cmake -B build -DNDT_CUDA_ENABLE_CUDA=OFF -DNDT_CUDA_BUILD_TESTS=ON
           cmake --build build -j4
           cd build && ctest --output-on-failure
+
+  ci-result:
+    name: CI result
+    if: always()
+    needs: [changes, cmake, ros2, tests-without-cuda]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
