@@ -38,7 +38,7 @@ At startup, the node writes `NDT backend: ndt_cuda` to its log. If the computer 
 
 The backend uses the neighbor search and the step of ndt_omp in Autoware: all voxels whose mean is within the resolution of a point, and no line search. The scores follow the definitions of ndt_omp, but the GPU computes with other rounding. So the results are close to the results of the backend `ndt_omp`, and they are not bit-identical.
 
-The parameter `ndt.num_threads` has no effect on the GPU.
+The parameter `ndt.num_threads` has no effect in this backend.
 
 The map work follows the rules of the interface:
 

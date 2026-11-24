@@ -320,6 +320,18 @@ TEST(NdtCudaBackend, CloneAndOriginalAlignAtTheSameTime)
   other.join();
 }
 
+// The interface does not let the backend keep the source after align() returns.
+TEST(NdtCudaBackend, AlignDoesNotKeepTheSource)
+{
+  const NdtBackend::SharedPtr backend = make_backend_with_map("ndt_cuda");
+  SKIP_WITHOUT_GPU(backend);
+  const auto scan = make_scan();
+  backend->align(make_guess(), scan);
+  EXPECT_EQ(scan.use_count(), 1);
+  const NdtBackend::SharedPtr clone = backend->clone();
+  EXPECT_EQ(scan.use_count(), 1);
+}
+
 TEST(NdtCudaBackend, CloneOutlivesTheOriginal)
 {
   NdtBackend::SharedPtr backend = make_backend_with_map("ndt_cuda");
