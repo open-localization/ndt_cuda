@@ -11,6 +11,8 @@
   <buildtool_depend>autoware_cmake</buildtool_depend>
 
   <depend>autoware_ndt_scan_matcher_common</depend>
+  <depend>eigen</depend>
+  <depend>libpcl-all-dev</depend>
   <depend>ndt_cuda</depend>
   <depend>pluginlib</depend>
 

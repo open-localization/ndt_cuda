@@ -138,6 +138,16 @@ public:
   NdtResult align(
     const Eigen::Matrix4f & guess, const pcl::PointCloud<PointSource>::ConstPtr & source) override
   {
+    // No map or no usable voxel: the result of ndt_omp, the guess with the scores 0.
+    // pcl::Registration does not align without a target cloud, and its result then has no arrays.
+    if (ndt_->getNumTargetVoxels() == 0) {
+      NdtResult result;
+      result.pose = guess;
+      result.transformation_array.push_back(guess);
+      result.transform_probability_array.push_back(0.0F);
+      result.nearest_voxel_transformation_likelihood_array.push_back(0.0F);
+      return result;
+    }
     // pcl::Registration needs a cloud for the aligned source. The node does not use it.
     pcl::PointCloud<PointSource> aligned_source;
     ndt_->setInputSource(source);

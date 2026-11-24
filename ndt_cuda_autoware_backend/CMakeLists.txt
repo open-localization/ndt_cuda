@@ -21,6 +21,8 @@ if(BUILD_TESTING)
   ament_auto_add_gtest(test_ndt_cuda_backend
     test/test_ndt_cuda_backend.cpp
   )
+  # Only for the count of CUDA devices.
+  target_link_libraries(test_ndt_cuda_backend ndt_cuda::ndt_cuda)
 endif()
 
 ament_auto_package()

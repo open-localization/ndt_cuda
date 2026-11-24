@@ -18,6 +18,7 @@
 
 #include <Eigen/Geometry>
 #include <autoware/ndt_scan_matcher_common/ndt_backend.hpp>
+#include <ndt_cuda/gpu_backend.hpp>
 #include <pluginlib/class_loader.hpp>
 
 #include <gtest/gtest.h>
@@ -25,9 +26,7 @@
 
 #include <cmath>
 #include <cstddef>
-#include <iostream>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -79,6 +78,15 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr make_scan()
   return scan;
 }
 
+// A regularization pose away from the true pose (the identity), so the regularization changes the
+// result.
+Eigen::Matrix4f make_regularization_pose()
+{
+  Eigen::Affine3f pose = Eigen::Affine3f::Identity();
+  pose.translate(Eigen::Vector3f(0.5F, 0.3F, 0.0F));
+  return pose.matrix();
+}
+
 Eigen::Matrix4f make_guess()
 {
   Eigen::Affine3f guess = Eigen::Affine3f::Identity();
@@ -96,16 +104,15 @@ pluginlib::ClassLoader<NdtBackend> & loader()
   return *instance;
 }
 
-// A backend from pluginlib, initialized as the node does it. Null if the computer has no GPU.
+// A backend from pluginlib, initialized as the node does it. Null if the computer has no CUDA
+// device. With a CUDA device, an error of initialize() fails the test.
 NdtBackend::SharedPtr make_backend(const std::string & name, const NdtParams & params)
 {
-  NdtBackend::SharedPtr backend = loader().createSharedInstance(name);
-  try {
-    backend->initialize(params);
-  } catch (const std::runtime_error & error) {
-    std::cerr << "initialize() of '" << name << "' failed: " << error.what() << std::endl;
+  if (name == "ndt_cuda" && ndt_cuda::GpuBackend::deviceCount() <= 0) {
     return nullptr;
   }
+  NdtBackend::SharedPtr backend = loader().createSharedInstance(name);
+  backend->initialize(params);
   return backend;
 }
 
@@ -144,8 +151,8 @@ TEST(NdtCudaBackend, AlignAgreesWithTheOmpBackend)
   for (const bool regularization : {false, true}) {
     SCOPED_TRACE(regularization ? "with regularization" : "without regularization");
     if (regularization) {
-      cuda->set_regularization_pose(Eigen::Matrix4f::Identity());
-      omp->set_regularization_pose(Eigen::Matrix4f::Identity());
+      cuda->set_regularization_pose(make_regularization_pose());
+      omp->set_regularization_pose(make_regularization_pose());
     }
     const NdtResult result = cuda->align(make_guess(), make_scan());
     const NdtResult expected = omp->align(make_guess(), make_scan());
@@ -191,31 +198,75 @@ TEST(NdtCudaBackend, ScoreFunctionsAgreeWithTheOmpBackend)
   shift.translate(Eigen::Vector3f(1.5F, 0.4F, -0.3F));
   pcl::transformPointCloud(*make_scan(), cloud_in_map, shift.matrix());
 
-  EXPECT_NEAR(
-    cuda->calculate_transformation_probability(cloud_in_map),
-    omp->calculate_transformation_probability(cloud_in_map), 1e-3);
-  EXPECT_NEAR(
-    cuda->calculate_nearest_voxel_transformation_likelihood(cloud_in_map),
-    omp->calculate_nearest_voxel_transformation_likelihood(cloud_in_map), 1e-3);
+  // Both libraries update the constants of the score in align(). The node always aligns before it
+  // calls the score functions, so the second pass is the one that matters.
+  for (const bool after_align : {false, true}) {
+    SCOPED_TRACE(after_align ? "after align()" : "before align()");
+    if (after_align) {
+      cuda->align(make_guess(), make_scan());
+      omp->align(make_guess(), make_scan());
+    }
+    EXPECT_NEAR(
+      cuda->calculate_transformation_probability(cloud_in_map),
+      omp->calculate_transformation_probability(cloud_in_map), 1e-3);
+    EXPECT_NEAR(
+      cuda->calculate_nearest_voxel_transformation_likelihood(cloud_in_map),
+      omp->calculate_nearest_voxel_transformation_likelihood(cloud_in_map), 1e-3);
 
-  const auto scores = cuda->calculate_nearest_voxel_score_each_point(cloud_in_map);
-  const auto expected_scores = omp->calculate_nearest_voxel_score_each_point(cloud_in_map);
-  EXPECT_LT(scores.size(), cloud_in_map.size());
-  ASSERT_EQ(scores.size(), expected_scores.size());
-  double sum = 0.0;
-  double expected_sum = 0.0;
-  for (std::size_t i = 0; i < scores.size(); ++i) {
-    sum += scores[i].intensity;
-    expected_sum += expected_scores[i].intensity;
+    const auto scores = cuda->calculate_nearest_voxel_score_each_point(cloud_in_map);
+    const auto expected_scores = omp->calculate_nearest_voxel_score_each_point(cloud_in_map);
+    EXPECT_LT(scores.size(), cloud_in_map.size());
+    ASSERT_EQ(scores.size(), expected_scores.size());
+    double sum = 0.0;
+    double expected_sum = 0.0;
+    for (std::size_t i = 0; i < scores.size(); ++i) {
+      sum += scores[i].intensity;
+      expected_sum += expected_scores[i].intensity;
+    }
+    EXPECT_NEAR(sum, expected_sum, 1e-3 * expected_sum);
   }
-  EXPECT_NEAR(sum, expected_sum, 1e-3 * expected_sum);
+}
+
+// Without a usable map, the result is the one of ndt_omp: the guess, the scores 0, and arrays of
+// one value, as the node expects for 0 iterations.
+TEST(NdtCudaBackend, AlignWithoutAMapGivesTheGuess)
+{
+  const NdtBackend::SharedPtr cuda = make_backend("ndt_cuda", make_params());
+  SKIP_WITHOUT_GPU(cuda);
+  const NdtBackend::SharedPtr omp = make_backend("ndt_omp", make_params());
+
+  // One point gives no voxel, because a voxel needs more points.
+  auto one_point = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+  one_point->emplace_back(1.0F, 2.0F, 3.0F);
+  for (const bool with_map : {false, true}) {
+    SCOPED_TRACE(with_map ? "map without voxels" : "no map");
+    if (with_map) {
+      cuda->add_target(one_point, "a");
+      cuda->commit_target();
+      omp->add_target(one_point, "a");
+      omp->commit_target();
+    }
+    const NdtResult result = cuda->align(make_guess(), make_scan());
+    const NdtResult expected = omp->align(make_guess(), make_scan());
+    EXPECT_EQ(result.pose, make_guess());
+    EXPECT_EQ(result.iteration_num, 0);
+    EXPECT_EQ(result.transform_probability, 0.0F);
+    EXPECT_EQ(result.nearest_voxel_transformation_likelihood, 0.0F);
+    EXPECT_EQ(result.transformation_array.size(), expected.transformation_array.size());
+    EXPECT_EQ(
+      result.transform_probability_array.size(), expected.transform_probability_array.size());
+    EXPECT_EQ(
+      result.nearest_voxel_transformation_likelihood_array.size(),
+      expected.nearest_voxel_transformation_likelihood_array.size());
+    EXPECT_EQ(result.transformation_array.size(), 1U);
+  }
 }
 
 TEST(NdtCudaBackend, CloneIsIndependent)
 {
   const NdtBackend::SharedPtr backend = make_backend_with_map("ndt_cuda");
   SKIP_WITHOUT_GPU(backend);
-  backend->set_regularization_pose(Eigen::Matrix4f::Identity());
+  backend->set_regularization_pose(make_regularization_pose());
   const NdtResult expected = backend->align(make_guess(), make_scan());
 
   const NdtBackend::SharedPtr clone = backend->clone();
@@ -233,6 +284,33 @@ TEST(NdtCudaBackend, CloneIsIndependent)
   EXPECT_FALSE(clone->has_target());
   EXPECT_TRUE(backend->has_target());
   EXPECT_EQ(backend->align(make_guess(), make_scan()).pose, expected.pose);
+}
+
+// Two instances must not share mutable state (see NdtBackend). Here the original and its clone
+// align clouds of different sizes at the same time.
+TEST(NdtCudaBackend, CloneAndOriginalAlignAtTheSameTime)
+{
+  const NdtBackend::SharedPtr backend = make_backend_with_map("ndt_cuda");
+  SKIP_WITHOUT_GPU(backend);
+  const auto map = make_map();
+  const auto large_scan = make_scan();
+  auto small_scan = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+  for (std::size_t i = 0; i < map->size(); i += 100) {
+    small_scan->push_back(map->points[i]);
+  }
+  const NdtResult expected_large = backend->align(make_guess(), large_scan);
+  const NdtBackend::SharedPtr clone = backend->clone();
+  const NdtResult expected_small = clone->align(make_guess(), small_scan);
+
+  std::thread other([&]() {
+    for (int i = 0; i < 100; ++i) {
+      EXPECT_EQ(clone->align(make_guess(), small_scan).pose, expected_small.pose);
+    }
+  });
+  for (int i = 0; i < 100; ++i) {
+    EXPECT_EQ(backend->align(make_guess(), large_scan).pose, expected_large.pose);
+  }
+  other.join();
 }
 
 TEST(NdtCudaBackend, CloneOutlivesTheOriginal)
@@ -253,7 +331,7 @@ TEST(NdtCudaBackend, CloneEmptyHasTheParametersAndNoMap)
   SKIP_WITHOUT_GPU(backend);
   backend->add_target(make_map(), "a");
   backend->commit_target();
-  backend->set_regularization_pose(Eigen::Matrix4f::Identity());
+  backend->set_regularization_pose(make_regularization_pose());
 
   const NdtBackend::SharedPtr empty = backend->clone_empty();
   EXPECT_FALSE(empty->has_target());
@@ -285,9 +363,10 @@ TEST(NdtCudaBackend, MapUpdateOfAnInstanceInAnotherThread)
   SKIP_WITHOUT_GPU(active);
   const NdtResult expected = active->align(make_guess(), make_scan());
 
+  // The node calls clone_empty() under the lock of the active instance, so not in the thread.
+  const NdtBackend::SharedPtr building = active->clone_empty();
   NdtBackend::SharedPtr updated;
   std::thread map_update([&]() {
-    const NdtBackend::SharedPtr building = active->clone_empty();
     building->add_target(make_map(), "b");
     building->commit_target();
     updated = building->clone();
