@@ -15,7 +15,7 @@ RUN="${AUTOWARE_BENCH_ROOT:-$HOME/projects}/autoware_bench/results/$MODE/video"
 export RATE="${RATE:-1.0}"
 export VIDEO="$RUN/screen.mp4"
 # Autoware NDT does not use the GPU.
-export GPU_TRACE="$( [[ "$MODE" == builtin ]] && echo 0 || echo 1 )"
+export GPU_TRACE="$([[ $MODE == builtin ]] && echo 0 || echo 1)"
 
 bash "$HERE/run_benchmark.sh" "$MODE" video true
 mkdir -p "$(dirname "$OUTPUT")"

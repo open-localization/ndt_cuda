@@ -5,19 +5,22 @@
 //
 // usage: ndt_cuda_align target.pcd source.pcd [resolution] [DIRECT7|DIRECT1|DIRECT26|KDTREE]
 
-#include <chrono>
-#include <iostream>
-#include <string>
+#include <ndt_cuda/ndt_cuda.hpp>
 
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 
-#include <ndt_cuda/ndt_cuda.hpp>
+#include <chrono>
+#include <iostream>
+#include <string>
 
-int main(int argc, char** argv) {
+int main(int argc, char ** argv)
+{
   if (argc < 3) {
-    std::cerr << "usage: ndt_cuda_align target.pcd source.pcd [resolution] [DIRECT7|DIRECT1|DIRECT26|KDTREE]" << std::endl;
+    std::cerr << "usage: ndt_cuda_align target.pcd source.pcd [resolution] "
+                 "[DIRECT7|DIRECT1|DIRECT26|KDTREE]"
+              << std::endl;
     return 1;
   }
   using PointT = pcl::PointXYZ;
@@ -45,10 +48,11 @@ int main(int argc, char** argv) {
 
   ndt_cuda::NormalDistributionsTransformCUDA<PointT, PointT> ndt;
   ndt.setResolution(resolution);
-  ndt.setNeighborhoodSearchMethod(method == "DIRECT1"    ? ndt_cuda::DIRECT1
-                                  : method == "DIRECT26" ? ndt_cuda::DIRECT26
-                                  : method == "KDTREE"   ? ndt_cuda::KDTREE
-                                                         : ndt_cuda::DIRECT7);
+  ndt.setNeighborhoodSearchMethod(
+    method == "DIRECT1"    ? ndt_cuda::DIRECT1
+    : method == "DIRECT26" ? ndt_cuda::DIRECT26
+    : method == "KDTREE"   ? ndt_cuda::KDTREE
+                           : ndt_cuda::DIRECT7);
 
   std::cout << "GPU     : " << ndt_cuda::GpuBackend::deviceName(ndt.getDevice()) << std::endl;
 
@@ -65,10 +69,13 @@ int main(int argc, char** argv) {
   auto t3 = std::chrono::steady_clock::now();
 
   auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
-  std::cout << "points  : target " << target->size() << ", source " << source->size() << ", voxels " << ndt.getNumTargetVoxels() << std::endl;
+  std::cout << "points  : target " << target->size() << ", source " << source->size() << ", voxels "
+            << ndt.getNumTargetVoxels() << std::endl;
   std::cout << "target  : " << ms(t0, t1) << " ms (voxel grid + upload)" << std::endl;
-  std::cout << "align   : first " << ms(t1, t2) << " ms, average " << ms(t2, t3) / repeats << " ms" << std::endl;
-  std::cout << "iters   : " << ndt.getFinalNumIteration() << ", converged " << ndt.hasConverged() << ", trans_prob " << ndt.getTransformationProbability() << std::endl;
+  std::cout << "align   : first " << ms(t1, t2) << " ms, average " << ms(t2, t3) / repeats << " ms"
+            << std::endl;
+  std::cout << "iters   : " << ndt.getFinalNumIteration() << ", converged " << ndt.hasConverged()
+            << ", trans_prob " << ndt.getTransformationProbability() << std::endl;
   std::cout << "result  :\n" << ndt.getFinalTransformation() << std::endl;
   return 0;
 }

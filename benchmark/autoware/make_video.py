@@ -32,7 +32,7 @@ def latest(series, t):
 
 def window_mean(series, start, end):
     times, values = series
-    selected = values[bisect.bisect_right(times, start):bisect.bisect_right(times, end)]
+    selected = values[bisect.bisect_right(times, start) : bisect.bisect_right(times, end)]
     return sum(selected) / len(selected) if selected else 0.0
 
 
@@ -45,15 +45,25 @@ def overlay(run_dir, label, duration):
         start = float(f.read())
     cpu = read_series(f"{run_dir}/resources.csv", "ndt_cpu_percent")
     vram = read_series(f"{run_dir}/resources.csv", "ndt_vram_mib")
-    gpu = read_series(f"{run_dir}/gpu_busy.csv", "busy_percent") if os.path.exists(f"{run_dir}/gpu_busy.csv") else None
+    gpu = (
+        read_series(f"{run_dir}/gpu_busy.csv", "busy_percent")
+        if os.path.exists(f"{run_dir}/gpu_busy.csv")
+        else None
+    )
 
     lines = [
-        "[Script Info]", "ScriptType: v4.00+", "PlayResX: 1920", "PlayResY: 1080", "",
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "PlayResX: 1920",
+        "PlayResY: 1080",
+        "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV",
         # BorderStyle 3 draws a box behind the text, black at 65 % opacity.
-        "Style: Default,DejaVu Sans Mono,28,&H00FFFFFF,&H59000000,&H59000000,1,3,10,0,9,30,30,30", "",
-        "[Events]", "Format: Layer, Start, End, Style, Text",
+        "Style: Default,DejaVu Sans Mono,28,&H00FFFFFF,&H59000000,&H59000000,1,3,10,0,9,30,30,30",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Text",
     ]
     t = 0.0
     while t < duration:
@@ -80,11 +90,47 @@ def overlay(run_dir, label, duration):
 
 def main(run_dir, label, output):
     screen = f"{run_dir}/screen.mp4"
-    duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", screen],
-                                    capture_output=True, text=True, check=True).stdout)
+    duration = float(
+        subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
+                screen,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
     subtitles = overlay(run_dir, label, duration)
-    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", screen, "-vf", f"ass={subtitles}",
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p", output], check=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            screen,
+            "-vf",
+            f"ass={subtitles}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            output,
+        ],
+        check=True,
+    )
 
 
 if __name__ == "__main__":

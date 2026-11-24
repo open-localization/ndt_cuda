@@ -14,13 +14,13 @@ The CUDA toolkit is needed to build ndt_cuda. The Autoware CUDA images have it, 
 
 ## What it changes
 
-| File | Change |
-| --- | --- |
+| File                                                            | Change                                                                                                                                                       |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `include/autoware/ndt_scan_matcher/ndt_omp/multigrid_ndt_omp.h` | Replaced: `pclomp::MultiGridNormalDistributionsTransform` becomes ndt_cuda's `MultiGridNormalDistributionsTransformCUDA`, with Autoware's covariance formula |
-| `include/autoware/ndt_scan_matcher/ndt_omp/ndt_struct.hpp` | Replaced: `pclomp::NdtParams`, `NdtResult` and the search methods become ndt_cuda's |
-| `src/ndt_omp/multigrid_*`, `multi_voxel_grid_covariance_omp*` | Removed |
-| `CMakeLists.txt`, `package.xml` | Depend on ndt_cuda |
-| `src/ndt_scan_matcher_core.cpp` | Two calls get the `pclomp::` prefix, which argument dependent lookup no longer supplies |
+| `include/autoware/ndt_scan_matcher/ndt_omp/ndt_struct.hpp`      | Replaced: `pclomp::NdtParams`, `NdtResult` and the search methods become ndt_cuda's                                                                          |
+| `src/ndt_omp/multigrid_*`, `multi_voxel_grid_covariance_omp*`   | Removed                                                                                                                                                      |
+| `CMakeLists.txt`, `package.xml`                                 | Depend on ndt_cuda                                                                                                                                           |
+| `src/ndt_scan_matcher_core.cpp`                                 | Two calls get the `pclomp::` prefix, which argument dependent lookup no longer supplies                                                                      |
 
 To go back to the CPU, restore the package from git (`git checkout -- .` in `autoware_core`).
 

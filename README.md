@@ -19,14 +19,14 @@ CUDA accelerated **Normal Distributions Transform (NDT)** point cloud registrati
 
 ## Requirements
 
-| | Version |
-|---|---|
-| CMake | ≥ 3.18 |
-| C++ compiler | C++17 (GCC ≥ 9, Clang ≥ 10) |
-| CUDA toolkit | ≥ 11.4 (12.x recommended; ≥ 11.8 for Ada / Hopper native code) |
-| PCL | ≥ 1.11 (Ubuntu 22.04: 1.12, Ubuntu 24.04: 1.14) |
-| Eigen | 3.3+ |
-| ROS 2 (optional) | Humble, Jazzy (any ament_cmake distro should work) |
+|                  | Version                                                        |
+| ---------------- | -------------------------------------------------------------- |
+| CMake            | ≥ 3.18                                                         |
+| C++ compiler     | C++17 (GCC ≥ 9, Clang ≥ 10)                                    |
+| CUDA toolkit     | ≥ 11.4 (12.x recommended; ≥ 11.8 for Ada / Hopper native code) |
+| PCL              | ≥ 1.11 (Ubuntu 22.04: 1.12, Ubuntu 24.04: 1.14)                |
+| Eigen            | 3.3+                                                           |
+| ROS 2 (optional) | Humble, Jazzy (any ament_cmake distro should work)             |
 
 ## Build
 
@@ -47,6 +47,7 @@ In your package:
 ```xml
 <depend>ndt_cuda</depend>
 ```
+
 ```cmake
 find_package(ndt_cuda REQUIRED)
 target_link_libraries(your_node ndt_cuda::ndt_cuda)
@@ -67,16 +68,16 @@ target_link_libraries(your_target ndt_cuda::ndt_cuda)
 
 ### CMake options
 
-| Option | Default | |
-|---|---|---|
+| Option                     | Default                                        |                                                                                                                                      |
+| -------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `CMAKE_CUDA_ARCHITECTURES` | `75;86;87;89;90` (`75;86;87` with CUDA < 11.8) | Target GPUs. Each entry also embeds PTX, so newer GPUs JIT compile. Use `native` (CMake ≥ 3.24) to build only for the installed GPU. |
-| `NDT_CUDA_BUILD_EXAMPLES` | `ON` | `ndt_cuda_align` example |
-| `NDT_CUDA_BUILD_TESTS` | `OFF` | Validation tests (download koide3/ndt_omp and tier4/ndt_omp as references) |
-| `NDT_CUDA_BUILD_GPU_TESTS` | `OFF` | Tests of the real CUDA kernels, skipped when no GPU is available (download koide3/ndt_omp and tier4/ndt_omp as references) |
-| `NDT_CUDA_BUILD_BENCHMARK` | `OFF` | ndt_omp vs ndt_cuda benchmark (downloads koide3/ndt_omp) |
-| `NDT_OMP_SOURCE_DIR` | — | Use a local ndt_omp checkout instead of downloading it |
-| `NDT_OMP_TIER4_SOURCE_DIR` | — | Use a local tier4/ndt_omp checkout instead of downloading it |
-| `NDT_CUDA_ENABLE_CUDA` | `ON` | With `ON`, configuring fails if no CUDA compiler is found. `OFF` builds only the GPU-less tests (no CUDA toolkit needed) |
+| `NDT_CUDA_BUILD_EXAMPLES`  | `ON`                                           | `ndt_cuda_align` example                                                                                                             |
+| `NDT_CUDA_BUILD_TESTS`     | `OFF`                                          | Validation tests (download koide3/ndt_omp and tier4/ndt_omp as references)                                                           |
+| `NDT_CUDA_BUILD_GPU_TESTS` | `OFF`                                          | Tests of the real CUDA kernels, skipped when no GPU is available (download koide3/ndt_omp and tier4/ndt_omp as references)           |
+| `NDT_CUDA_BUILD_BENCHMARK` | `OFF`                                          | ndt_omp vs ndt_cuda benchmark (downloads koide3/ndt_omp)                                                                             |
+| `NDT_OMP_SOURCE_DIR`       | —                                              | Use a local ndt_omp checkout instead of downloading it                                                                               |
+| `NDT_OMP_TIER4_SOURCE_DIR` | —                                              | Use a local tier4/ndt_omp checkout instead of downloading it                                                                         |
+| `NDT_CUDA_ENABLE_CUDA`     | `ON`                                           | With `ON`, configuring fails if no CUDA compiler is found. `OFF` builds only the GPU-less tests (no CUDA toolkit needed)             |
 
 ## Usage
 
@@ -119,20 +120,20 @@ Code that holds the registration as `pcl::Registration<PointT, PointT>::Ptr` (e.
 
 ### Neighbor search methods
 
-| Method | Voxels used per point | Notes |
-|---|---|---|
-| `KDTREE` | all voxels whose mean is within `resolution` | Same neighbor set as ndt_omp's FLANN radius search, evaluated exactly on the GPU |
-| `DIRECT26` | the 26 surrounding voxels (not the containing one) | As in ndt_omp |
-| `DIRECT7` | containing voxel + 6 face neighbors | **Recommended** (default) |
-| `DIRECT1` | containing voxel only | Fastest, least robust |
+| Method     | Voxels used per point                              | Notes                                                                            |
+| ---------- | -------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `KDTREE`   | all voxels whose mean is within `resolution`       | Same neighbor set as ndt_omp's FLANN radius search, evaluated exactly on the GPU |
+| `DIRECT26` | the 26 surrounding voxels (not the containing one) | As in ndt_omp                                                                    |
+| `DIRECT7`  | containing voxel + 6 face neighbors                | **Recommended** (default)                                                        |
+| `DIRECT1`  | containing voxel only                              | Fastest, least robust                                                            |
 
 ## How it works
 
-| Step | Where |
-|---|---|
-| Voxel grid (mean / inverse covariance per voxel), when the target or resolution changes | CPU (same arithmetic as ndt_omp), then uploaded once as an open-addressing hash table |
+| Step                                                                                                                                        | Where                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Voxel grid (mean / inverse covariance per voxel), when the target or resolution changes                                                     | CPU (same arithmetic as ndt_omp), then uploaded once as an open-addressing hash table                             |
 | Every score / gradient / hessian evaluation: transform all source points, look up neighbor voxels, accumulate Eq. 6.9–6.13 [Magnusson 2009] | **GPU** — one thread per point, per-block warp-shuffle reduction, fixed-order final reduction in double precision |
-| 6×6 Newton solve and More-Thuente line search | CPU (unchanged from PCL / ndt_omp) |
+| 6×6 Newton solve and More-Thuente line search                                                                                               | CPU (unchanged from PCL / ndt_omp)                                                                                |
 
 The per-point math lives in [`ndt_cuda/src/ndt_cuda_kernels.cuh`](ndt_cuda/src/ndt_cuda_kernels.cuh) as `__host__ __device__` functions, shared by the kernels and by the CPU emulation used in the tests.
 
@@ -152,15 +153,15 @@ The per-point math lives in [`ndt_cuda/src/ndt_cuda_kernels.cuh`](ndt_cuda/src/n
 
 `ndt_cuda/test/ndt_cuda_test.cpp` checks the GPU implementation **without a GPU**: it links `NormalDistributionsTransformCUDA` against a CPU emulation of the backend ([`ndt_cuda/test/gpu_backend_emulated.cpp`](ndt_cuda/test/gpu_backend_emulated.cpp)) that runs the exact kernel code and reproduces the GPU data layout. koide3/ndt_omp is downloaded at a pinned commit and used as reference.
 
-| Check | Result on the sample data |
-|---|---|
-| Voxel grid vs ndt_omp (resolution 0.5 / 1 / 2 m) | identical (max difference 0) |
-| Score / gradient / hessian vs ndt_omp, 4 search methods, 3 poses | ≤ 1e-5 relative error |
-| Gradient / hessian vs central finite differences | ≤ 3e-4 relative error |
-| `align()` vs ndt_omp, 4 search methods, identity and perturbed initial guess | ≤ 3e-6 m, ≤ 0.01° |
-| Map shifted by 47 km, scan in sensor frame | same result as unshifted (mm level, as ndt_omp) |
-| `pcl::Registration::Ptr` usage, `pclomp_compat.hpp` with and without ndt_omp | compiles and converges |
-| `getFitnessScore()` vs ndt_omp with `DIRECT7`, also through `pcl::Registration*` | ≤ 1e-6 relative error |
+| Check                                                                                                   | Result on the sample data                                          |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Voxel grid vs ndt_omp (resolution 0.5 / 1 / 2 m)                                                        | identical (max difference 0)                                       |
+| Score / gradient / hessian vs ndt_omp, 4 search methods, 3 poses                                        | ≤ 1e-5 relative error                                              |
+| Gradient / hessian vs central finite differences                                                        | ≤ 3e-4 relative error                                              |
+| `align()` vs ndt_omp, 4 search methods, identity and perturbed initial guess                            | ≤ 3e-6 m, ≤ 0.01°                                                  |
+| Map shifted by 47 km, scan in sensor frame                                                              | same result as unshifted (mm level, as ndt_omp)                    |
+| `pcl::Registration::Ptr` usage, `pclomp_compat.hpp` with and without ndt_omp                            | compiles and converges                                             |
+| `getFitnessScore()` vs ndt_omp with `DIRECT7`, also through `pcl::Registration*`                        | ≤ 1e-6 relative error                                              |
 | Multi-tile NDT vs tier4/ndt_omp with Autoware's default parameters: tiles, copies, regularization, NVTL | same iteration counts, poses within about 1 µm, scores within 1e-3 |
 
 ```bash
@@ -189,12 +190,12 @@ It runs ndt_omp (all CPU threads) and ndt_cuda on the same clouds and prints the
 
 Median time per `align()` on the sample data (about 16000 source points, resolution 1 m), NVIDIA GeForce RTX 3050 Ti Laptop GPU against ndt_omp with 16 threads on an Intel Core i7-11800H:
 
-| Method | ndt_omp | ndt_cuda | Speedup |
-|---|---|---|---|
-| `KDTREE` | 18.29 ms | 0.79 ms | ×23 |
-| `DIRECT26` | 56.45 ms | 0.61 ms | ×93 |
-| `DIRECT7` | 12.04 ms | 0.64 ms | ×19 |
-| `DIRECT1` | 6.06 ms | 0.64 ms | ×9 |
+| Method     | ndt_omp  | ndt_cuda | Speedup |
+| ---------- | -------- | -------- | ------- |
+| `KDTREE`   | 18.29 ms | 0.79 ms  | ×23     |
+| `DIRECT26` | 56.45 ms | 0.61 ms  | ×93     |
+| `DIRECT7`  | 12.04 ms | 0.64 ms  | ×19     |
+| `DIRECT1`  | 6.06 ms  | 0.64 ms  | ×9      |
 
 These numbers come from one machine and one pair of small scans; run the benchmark on your own hardware and data. See the [benchmark report](docs/benchmark.md) for repeated measurements, large clouds, map updates, GPU memory and utilization, and limitations.
 
@@ -218,5 +219,5 @@ ndt_cuda is released under the [BSD 3-Clause License](LICENSE), except for three
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the full notices and the list of derived files. Algorithm references:
 
-- M. Magnusson, *The Three-Dimensional Normal-Distributions Transform*, PhD thesis, Örebro University, 2009.
-- J. J. Moré and D. J. Thuente, *Line Search Algorithms with Guaranteed Sufficient Decrease*, ACM TOMS, 1994.
+- M. Magnusson, _The Three-Dimensional Normal-Distributions Transform_, PhD thesis, Örebro University, 2009.
+- J. J. Moré and D. J. Thuente, _Line Search Algorithms with Guaranteed Sufficient Decrease_, ACM TOMS, 1994.

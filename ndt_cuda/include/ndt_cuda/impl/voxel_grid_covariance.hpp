@@ -35,23 +35,25 @@
  *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
  *
- *  Derived from pcl::VoxelGridCovariance::applyFilter() and pclomp::VoxelGridCovariance::applyFilter()
- *  (koide3/ndt_omp, BSD 2-Clause, Copyright (c) 2019, k.koide).
+ *  Derived from pcl::VoxelGridCovariance::applyFilter() and
+ * pclomp::VoxelGridCovariance::applyFilter() (koide3/ndt_omp, BSD 2-Clause, Copyright (c) 2019,
+ * k.koide).
  */
 
 #pragma once
+
+#include <Eigen/Eigenvalues>
+#include <ndt_cuda/voxel_grid_covariance.hpp>
+
+#include <pcl/console/print.h>
 
 #include <cmath>
 #include <cstdint>
 #include <limits>
 
-#include <Eigen/Eigenvalues>
-#include <pcl/console/print.h>
-
-#include <ndt_cuda/voxel_grid_covariance.hpp>
-
 template <typename PointT>
-bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT>& cloud) {
+bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT> & cloud)
+{
   leaves_.clear();
   min_b_.setZero();
   max_b_.setZero();
@@ -64,13 +66,16 @@ bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT>&
   // Same float arithmetic as pcl::VoxelGrid (inverse_leaf_size_ is a float array).
   const float inverse_leaf_size = 1.0f / leaf_size_;
 
-  // Non-finite points are skipped even if the cloud is marked as dense: they have no meaningful voxel key.
-  const auto is_finite = [](const PointT& pt) { return std::isfinite(pt.x) && std::isfinite(pt.y) && std::isfinite(pt.z); };
+  // Non-finite points are skipped even if the cloud is marked as dense: they have no meaningful
+  // voxel key.
+  const auto is_finite = [](const PointT & pt) {
+    return std::isfinite(pt.x) && std::isfinite(pt.y) && std::isfinite(pt.z);
+  };
 
   Eigen::Array3f min_p = Eigen::Array3f::Constant(std::numeric_limits<float>::max());
   Eigen::Array3f max_p = Eigen::Array3f::Constant(std::numeric_limits<float>::lowest());
   bool has_finite_point = false;
-  for (const auto& pt : cloud.points) {
+  for (const auto & pt : cloud.points) {
     if (!is_finite(pt)) continue;
     const Eigen::Array3f p(pt.x, pt.y, pt.z);
     min_p = min_p.min(p);
@@ -86,7 +91,9 @@ bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT>&
   const std::int64_t dy = static_cast<std::int64_t>((max_p[1] - min_p[1]) * inverse_leaf_size) + 1;
   const std::int64_t dz = static_cast<std::int64_t>((max_p[2] - min_p[2]) * inverse_leaf_size) + 1;
   if (dx * dy * dz > static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::max())) {
-    PCL_WARN("[ndt_cuda::VoxelGridCovariance] Leaf size is too small for the input dataset. Integer indices would overflow.\n");
+    PCL_WARN(
+      "[ndt_cuda::VoxelGridCovariance] Leaf size is too small for the input dataset. Integer "
+      "indices would overflow.\n");
     return false;
   }
 
@@ -100,17 +107,20 @@ bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT>&
 
   // First pass: accumulate point sums and second moments per voxel
   leaves_.reserve(cloud.size() / 4 + 1);
-  for (const auto& pt : cloud.points) {
+  for (const auto & pt : cloud.points) {
     if (!is_finite(pt)) continue;
-    const int ijk0 = static_cast<int>(std::floor(pt.x * inverse_leaf_size) - static_cast<float>(min_b_[0]));
-    const int ijk1 = static_cast<int>(std::floor(pt.y * inverse_leaf_size) - static_cast<float>(min_b_[1]));
-    const int ijk2 = static_cast<int>(std::floor(pt.z * inverse_leaf_size) - static_cast<float>(min_b_[2]));
+    const int ijk0 =
+      static_cast<int>(std::floor(pt.x * inverse_leaf_size) - static_cast<float>(min_b_[0]));
+    const int ijk1 =
+      static_cast<int>(std::floor(pt.y * inverse_leaf_size) - static_cast<float>(min_b_[1]));
+    const int ijk2 =
+      static_cast<int>(std::floor(pt.z * inverse_leaf_size) - static_cast<float>(min_b_[2]));
     const int idx = ijk0 * divb_mul_[0] + ijk1 * divb_mul_[1] + ijk2 * divb_mul_[2];
 
-    // Note: as in PCL and ndt_omp, the second moment accumulator (cov) starts from the identity set by Leaf's
-    // constructor rather than from zero. This adds I * (n - 1) / n^2 to the covariance (a small regularization);
-    // it is kept so that the grid is identical to ndt_omp's.
-    Leaf& leaf = leaves_[idx];
+    // Note: as in PCL and ndt_omp, the second moment accumulator (cov) starts from the identity set
+    // by Leaf's constructor rather than from zero. This adds I * (n - 1) / n^2 to the covariance (a
+    // small regularization); it is kept so that the grid is identical to ndt_omp's.
+    Leaf & leaf = leaves_[idx];
     const Eigen::Vector3d pt3d(pt.x, pt.y, pt.z);
     leaf.mean += pt3d;
     leaf.cov += pt3d * pt3d.transpose();
@@ -119,7 +129,7 @@ bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT>&
 
   // Second pass: mean, covariance, eigenvalue inflation and inverse covariance
   Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigensolver;
-  for (auto& [key, leaf] : leaves_) {
+  for (auto & [key, leaf] : leaves_) {
     (void)key;
     const Eigen::Vector3d pt_sum = leaf.mean;
     leaf.mean /= leaf.nr_points;
@@ -133,7 +143,8 @@ bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT>&
     if (use_autoware_covariance_) {
       leaf.cov = (leaf.cov - pt_sum * leaf.mean.transpose()) / (leaf.nr_points - 1);
     } else {
-      leaf.cov = (leaf.cov - 2 * (pt_sum * leaf.mean.transpose())) / leaf.nr_points + leaf.mean * leaf.mean.transpose();
+      leaf.cov = (leaf.cov - 2 * (pt_sum * leaf.mean.transpose())) / leaf.nr_points +
+                 leaf.mean * leaf.mean.transpose();
       leaf.cov *= (leaf.nr_points - 1.0) / leaf.nr_points;
     }
 
@@ -158,7 +169,9 @@ bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT>&
     leaf.evals = eigen_val.diagonal();
 
     leaf.icov = leaf.cov.inverse();
-    if (leaf.icov.maxCoeff() == std::numeric_limits<float>::infinity() || leaf.icov.minCoeff() == -std::numeric_limits<float>::infinity()) {
+    if (
+      leaf.icov.maxCoeff() == std::numeric_limits<float>::infinity() ||
+      leaf.icov.minCoeff() == -std::numeric_limits<float>::infinity()) {
       leaf.nr_points = -1;
     }
   }
@@ -167,9 +180,10 @@ bool ndt_cuda::VoxelGridCovariance<PointT>::build(const pcl::PointCloud<PointT>&
 }
 
 template <typename PointT>
-std::size_t ndt_cuda::VoxelGridCovariance<PointT>::getNumValidVoxels() const {
+std::size_t ndt_cuda::VoxelGridCovariance<PointT>::getNumValidVoxels() const
+{
   std::size_t n = 0;
-  for (const auto& [key, leaf] : leaves_) {
+  for (const auto & [key, leaf] : leaves_) {
     (void)key;
     n += leaf.nr_points >= min_points_per_voxel_ ? 1 : 0;
   }
@@ -177,7 +191,8 @@ std::size_t ndt_cuda::VoxelGridCovariance<PointT>::getNumValidVoxels() const {
 }
 
 template <typename PointT>
-void ndt_cuda::VoxelGridCovariance<PointT>::exportTo(VoxelGridHost& grid) const {
+void ndt_cuda::VoxelGridCovariance<PointT>::exportTo(VoxelGridHost & grid) const
+{
   grid.clear();
   for (int d = 0; d < 3; d++) {
     grid.leaf_size[d] = leaf_size_;
@@ -191,16 +206,21 @@ void ndt_cuda::VoxelGridCovariance<PointT>::exportTo(VoxelGridHost& grid) const 
   grid.icovs.reserve(leaves_.size() * 6);
   grid.flags.reserve(leaves_.size());
 
-  for (const auto& [key, leaf] : leaves_) {
-    // nr_points == -1: enough points but a degenerate covariance. Such voxels are skipped by the DIRECT* searches but
-    // are still part of the centroid cloud searched by ndt_omp's KDTREE method.
+  for (const auto & [key, leaf] : leaves_) {
+    // nr_points == -1: enough points but a degenerate covariance. Such voxels are skipped by the
+    // DIRECT* searches but are still part of the centroid cloud searched by ndt_omp's KDTREE
+    // method.
     const bool direct = leaf.nr_points >= min_points_per_voxel_;
     const bool centroid = direct || leaf.nr_points == -1;
     if (!centroid) continue;
 
     grid.keys.push_back(static_cast<std::int32_t>(key));
     grid.means.insert(grid.means.end(), {leaf.mean(0), leaf.mean(1), leaf.mean(2)});
-    grid.icovs.insert(grid.icovs.end(), {leaf.icov(0, 0), leaf.icov(0, 1), leaf.icov(0, 2), leaf.icov(1, 1), leaf.icov(1, 2), leaf.icov(2, 2)});
-    grid.flags.push_back(static_cast<std::uint8_t>((direct ? VoxelGridHost::kFlagDirect : 0) | VoxelGridHost::kFlagCentroid));
+    grid.icovs.insert(
+      grid.icovs.end(), {leaf.icov(0, 0), leaf.icov(0, 1), leaf.icov(0, 2), leaf.icov(1, 1),
+                         leaf.icov(1, 2), leaf.icov(2, 2)});
+    grid.flags.push_back(
+      static_cast<std::uint8_t>(
+        (direct ? VoxelGridHost::kFlagDirect : 0) | VoxelGridHost::kFlagCentroid));
   }
 }

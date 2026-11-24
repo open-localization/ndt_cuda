@@ -12,16 +12,19 @@
 #include <string>
 #include <vector>
 
-namespace ndt_cuda {
+namespace ndt_cuda
+{
 
 /** \brief Flattened voxel grid uploaded to the GPU (see VoxelGridCovariance::exportTo()). */
-struct VoxelGridHost {
+struct VoxelGridHost
+{
   /** \brief Voxel side lengths. */
   float leaf_size[3] = {1.0f, 1.0f, 1.0f};
   /** \brief Bounding box of the grid in voxel coordinates. */
   int min_b[3] = {0, 0, 0};
   int max_b[3] = {0, 0, 0};
-  /** \brief Multipliers that linearize voxel coordinates: key = sum_d (ijk_d - min_b_d) * divb_mul_d. */
+  /** \brief Multipliers that linearize voxel coordinates: key = sum_d (ijk_d - min_b_d) *
+   * divb_mul_d. */
   int divb_mul[3] = {0, 0, 0};
 
   /** \brief Linear voxel index (key) of each voxel. */
@@ -35,10 +38,12 @@ struct VoxelGridHost {
 
   /** \brief Voxel has enough points and a valid covariance (used by the DIRECT* searches). */
   static constexpr uint8_t kFlagDirect = 1;
-  /** \brief Voxel had enough points, possibly with a degenerate covariance (used by the KDTREE search, as in ndt_omp). */
+  /** \brief Voxel had enough points, possibly with a degenerate covariance (used by the KDTREE
+   * search, as in ndt_omp). */
   static constexpr uint8_t kFlagCentroid = 2;
 
-  void clear() {
+  void clear()
+  {
     keys.clear();
     means.clear();
     icovs.clear();
@@ -48,7 +53,8 @@ struct VoxelGridHost {
 };
 
 /** \brief Inputs of one score / gradient / hessian evaluation. */
-struct DerivativeParams {
+struct DerivativeParams
+{
   /** \brief Absolute 4x4 transformation (row-major) applied to the source cloud. */
   float transform[16];
   /** \brief Angular jacobian rows, Equation 6.19 [Magnusson 2009]. */
@@ -66,7 +72,8 @@ struct DerivativeParams {
 };
 
 /** \brief Outputs of one evaluation. The hessian is row-major 6x6. */
-struct DerivativeResult {
+struct DerivativeResult
+{
   double score;
   double gradient[6];
   double hessian[36];
@@ -79,7 +86,8 @@ struct DerivativeResult {
 };
 
 /** \brief Scores of a cloud, without the normalization of DerivativeResult. */
-struct ProbabilityResult {
+struct ProbabilityResult
+{
   /** \brief Sum of the scores of all point / neighbor voxel pairs. */
   double score;
   /** \brief Sum over the points of the score of their best voxel. */
@@ -90,41 +98,53 @@ struct ProbabilityResult {
 
 /** \brief Owns the GPU state: voxel hash table, source points, scratch buffers and a CUDA stream.
  *
- * One instance must not be used from several threads at the same time; separate instances are independent.
+ * One instance must not be used from several threads at the same time; separate instances are
+ * independent.
  */
-class GpuBackend {
+class GpuBackend
+{
 public:
   /** \param device CUDA device ordinal, or -1 for the device that is current at construction. */
   explicit GpuBackend(int device = -1);
   ~GpuBackend();
 
-  GpuBackend(const GpuBackend&) = delete;
-  GpuBackend& operator=(const GpuBackend&) = delete;
+  GpuBackend(const GpuBackend &) = delete;
+  GpuBackend & operator=(const GpuBackend &) = delete;
 
   /** \brief Uploads the voxel grid and builds the GPU hash table. */
-  void setTarget(const VoxelGridHost& grid);
+  void setTarget(const VoxelGridHost & grid);
 
-  /** \brief Uses the map that `other` uploaded, without a copy: uploaded maps never change, so they can be shared.
+  /** \brief Uses the map that `other` uploaded, without a copy: uploaded maps never change, so they
+   * can be shared.
    *  \return false (nothing changed) if `other` uses another device. */
-  bool shareTarget(const GpuBackend& other);
+  bool shareTarget(const GpuBackend & other);
 
   /** \brief Uploads the source points, packed as x, y, z, (unused) per point. */
-  void setSource(const float* xyzw, std::size_t num_points);
+  void setSource(const float * xyzw, std::size_t num_points);
 
   std::size_t numTargetVoxels() const;
   std::size_t numSourcePoints() const;
 
-  /** \brief Score, gradient and (optionally) hessian of the source cloud transformed by params.transform. */
-  DerivativeResult computeDerivatives(const DerivativeParams& params);
+  /** \brief Score, gradient and (optionally) hessian of the source cloud transformed by
+   * params.transform. */
+  DerivativeResult computeDerivatives(const DerivativeParams & params);
 
-  /** \brief Mean negative log likelihood of an already transformed cloud (packed x, y, z, unused). */
-  double calculateScore(const float* xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, double gauss_d3, float radius, int search_method);
+  /** \brief Mean negative log likelihood of an already transformed cloud (packed x, y, z, unused).
+   */
+  double calculateScore(
+    const float * xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, double gauss_d3,
+    float radius, int search_method);
 
   /** \brief Scores of an already transformed cloud (packed x, y, z, unused). */
-  ProbabilityResult calculateProbability(const float* xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, float radius, int search_method);
+  ProbabilityResult calculateProbability(
+    const float * xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, float radius,
+    int search_method);
 
-  /** \brief Score of the best voxel of each point of an already transformed cloud; -1 for a point without neighbor voxels. */
-  void calculateNearestVoxelScores(const float* xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, float radius, int search_method, float* scores);
+  /** \brief Score of the best voxel of each point of an already transformed cloud; -1 for a point
+   * without neighbor voxels. */
+  void calculateNearestVoxelScores(
+    const float * xyzw, std::size_t num_points, double gauss_d1, double gauss_d2, float radius,
+    int search_method, float * scores);
 
   /** \brief Device ordinal used by this backend. */
   int device() const;

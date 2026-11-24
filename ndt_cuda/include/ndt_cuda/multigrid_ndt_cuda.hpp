@@ -50,11 +50,13 @@
  *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
  *
- *  Derived from pclomp::MultiGridNormalDistributionsTransform of tier4/ndt_omp (Apache License 2.0, see above), which
- *  derives from pcl::NormalDistributionsTransform (BSD License, this notice).
+ *  Derived from pclomp::MultiGridNormalDistributionsTransform of tier4/ndt_omp (Apache License 2.0,
+ * see above), which derives from pcl::NormalDistributionsTransform (BSD License, this notice).
  */
 
 #pragma once
+
+#include <ndt_cuda/ndt_cuda.hpp>
 
 #include <cstdint>
 #include <map>
@@ -62,22 +64,25 @@
 #include <string>
 #include <vector>
 
-#include <ndt_cuda/ndt_cuda.hpp>
+namespace ndt_cuda
+{
 
-namespace ndt_cuda {
-
-/** \brief NDT whose map is made of tiles that can be added and removed while running, on an NVIDIA GPU.
+/** \brief NDT whose map is made of tiles that can be added and removed while running, on an NVIDIA
+ * GPU.
  *
- * Same interface and optimization as pclomp::MultiGridNormalDistributionsTransform (tier4/ndt_omp), which Autoware's
- * ndt_scan_matcher uses. Each tile gets its own voxels on the CPU. Changes take effect in createVoxelKdtree(), which
- * uploads the loaded tiles to the GPU again.
+ * Same interface and optimization as pclomp::MultiGridNormalDistributionsTransform (tier4/ndt_omp),
+ * which Autoware's ndt_scan_matcher uses. Each tile gets its own voxels on the CPU. Changes take
+ * effect in createVoxelKdtree(), which uploads the loaded tiles to the GPU again.
  *
- * \warning As in tier4/ndt_omp, no kd-tree is built on the map, so pcl::Registration::getFitnessScore() must not be used.
- * \note setResolution() and setParams() do not change the tiles already added, as in tier4/ndt_omp. createVoxelKdtree()
- *       throws if tiles with different resolutions are loaded.
+ * \warning As in tier4/ndt_omp, no kd-tree is built on the map, so
+ * pcl::Registration::getFitnessScore() must not be used.
+ * \note setResolution() and setParams() do not change the tiles already added, as in tier4/ndt_omp.
+ * createVoxelKdtree() throws if tiles with different resolutions are loaded.
  */
 template <typename PointSource, typename PointTarget>
-class MultiGridNormalDistributionsTransformCUDA : public NormalDistributionsTransformCUDA<PointSource, PointTarget> {
+class MultiGridNormalDistributionsTransformCUDA
+: public NormalDistributionsTransformCUDA<PointSource, PointTarget>
+{
   using Base = NormalDistributionsTransformCUDA<PointSource, PointTarget>;
 
 protected:
@@ -87,24 +92,29 @@ protected:
 
 public:
   using Ptr = pcl::shared_ptr<MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>>;
-  using ConstPtr = pcl::shared_ptr<const MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>>;
+  using ConstPtr =
+    pcl::shared_ptr<const MultiGridNormalDistributionsTransformCUDA<PointSource, PointTarget>>;
 
-  /** \brief Constructor. Uses the defaults of tier4/ndt_omp, including the KDTREE search and no line search.
+  /** \brief Constructor. Uses the defaults of tier4/ndt_omp, including the KDTREE search and no
+   * line search.
    * \param[in] device CUDA device ordinal; -1 uses the current device.
    * \throws std::runtime_error if no CUDA capable device is available.
    */
   explicit MultiGridNormalDistributionsTransformCUDA(int device = -1);
 
-  /** \brief Adds or replaces the tile "default" and calls createVoxelKdtree(), as in tier4/ndt_omp. */
-  void setInputTarget(const PointCloudTargetConstPtr& cloud) override;
+  /** \brief Adds or replaces the tile "default" and calls createVoxelKdtree(), as in tier4/ndt_omp.
+   */
+  void setInputTarget(const PointCloudTargetConstPtr & cloud) override;
 
   /** \brief Builds the voxels of a tile on the CPU. A tile with the same id is replaced. */
-  void addTarget(const PointCloudTargetConstPtr& cloud, const std::string& target_id);
+  void addTarget(const PointCloudTargetConstPtr & cloud, const std::string & target_id);
 
-  void removeTarget(const std::string& target_id) { tiles_.erase(target_id); }
+  void removeTarget(const std::string & target_id) { tiles_.erase(target_id); }
 
-  /** \brief Makes the added and removed tiles take effect. The name is that of tier4/ndt_omp: no kd-tree is built.
-   * \throws std::invalid_argument if the loaded tiles have different resolutions or are too far apart for the voxel keys.
+  /** \brief Makes the added and removed tiles take effect. The name is that of tier4/ndt_omp: no
+   * kd-tree is built.
+   * \throws std::invalid_argument if the loaded tiles have different resolutions or are too far
+   * apart for the voxel keys.
    */
   void createVoxelKdtree();
 
@@ -124,8 +134,10 @@ protected:
   using Base::target_upload_pending_;
   using Base::transformation_epsilon_;
 
-  /** \brief Voxels of a tile, with their cell coordinates. They do not change once built, so copies share them. */
-  struct Tile {
+  /** \brief Voxels of a tile, with their cell coordinates. They do not change once built, so copies
+   * share them. */
+  struct Tile
+  {
     float leaf_size = 1.0f;
     std::vector<int> cells;  // 3 per voxel
     std::vector<double> means;
@@ -139,7 +151,7 @@ protected:
   bool finishIteration(double step_length) override;
 
   /** \brief Merges the tiles for the GPU. */
-  void mergeTiles(VoxelGridHost& grid) const;
+  void mergeTiles(VoxelGridHost & grid) const;
 
   std::map<std::string, std::shared_ptr<const Tile>> tiles_;
   pcl::PointCloud<PointTarget> voxel_means_;
@@ -150,6 +162,9 @@ public:
 
 }  // namespace ndt_cuda
 
-extern template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<pcl::PointXYZ, pcl::PointXYZ>;
-extern template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<pcl::PointXYZI, pcl::PointXYZI>;
-extern template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<pcl::PointXYZRGB, pcl::PointXYZRGB>;
+extern template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<
+  pcl::PointXYZ, pcl::PointXYZ>;
+extern template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<
+  pcl::PointXYZI, pcl::PointXYZI>;
+extern template class ndt_cuda::MultiGridNormalDistributionsTransformCUDA<
+  pcl::PointXYZRGB, pcl::PointXYZRGB>;

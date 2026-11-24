@@ -3,16 +3,30 @@
 //
 // Validation of ndt_cuda::NormalDistributionsTransformCUDA without a GPU.
 //
-// The test is linked against test/gpu_backend_emulated.cpp, which runs the exact per-point code of the CUDA kernels
-// (src/ndt_cuda_kernels.cuh) on the CPU. koide3/ndt_omp is used as the reference implementation. It checks:
+// The test is linked against test/gpu_backend_emulated.cpp, which runs the exact per-point code of
+// the CUDA kernels (src/ndt_cuda_kernels.cuh) on the CPU. koide3/ndt_omp is used as the reference
+// implementation. It checks:
 //   0. the voxel grid is identical to ndt_omp's,
-//   1. score / gradient / hessian against ndt_omp at several poses, for every neighbor search method,
+//   1. score / gradient / hessian against ndt_omp at several poses, for every neighbor search
+//   method,
 //   2. gradient and hessian against central finite differences on a synthetic grid,
 //   3. end-to-end align() results against ndt_omp, including large map coordinates,
 //   4. drop-in compatibility (pcl::Registration interface, pclomp_compat.hpp),
 //   5. target handling (empty and invalid targets, getFitnessScore(), optional kd-tree, copies).
 //
 // usage: ndt_cuda_test [data_dir]
+
+#include <ndt_cuda/angle_derivatives.hpp>
+#include <ndt_cuda/gpu_backend.hpp>
+#include <ndt_cuda/ndt_cuda.hpp>
+#include <ndt_cuda/pclomp_compat.hpp>  // after <pclomp/ndt_omp.h>, as documented
+#include <ndt_cuda/voxel_grid_covariance.hpp>
+
+#include <pcl/common/transforms.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pclomp/ndt_omp.h>
 
 #include <algorithm>
 #include <cmath>
@@ -23,19 +37,6 @@
 #include <string>
 #include <vector>
 
-#include <pcl/common/transforms.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_types.h>
-
-#include <pclomp/ndt_omp.h>
-
-#include <ndt_cuda/angle_derivatives.hpp>
-#include <ndt_cuda/gpu_backend.hpp>
-#include <ndt_cuda/ndt_cuda.hpp>
-#include <ndt_cuda/pclomp_compat.hpp>  // after <pclomp/ndt_omp.h>, as documented
-#include <ndt_cuda/voxel_grid_covariance.hpp>
-
 using PointT = pcl::PointXYZ;
 using Cloud = pcl::PointCloud<PointT>;
 using Vec6 = Eigen::Matrix<double, 6, 1>;
@@ -43,12 +44,14 @@ using Mat6 = Eigen::Matrix<double, 6, 6>;
 
 static int g_failures = 0;
 
-static void check(bool ok, const char* what, double value, double tol) {
+static void check(bool ok, const char * what, double value, double tol)
+{
   std::printf("  %-58s %12.3e  (tol %.0e)  %s\n", what, value, tol, ok ? "OK" : "FAIL");
   if (!ok) g_failures++;
 }
 
-static double relErr(const double* a, const double* b, int n) {
+static double relErr(const double * a, const double * b, int n)
+{
   double num = 0.0, den = 0.0;
   for (int i = 0; i < n; i++) {
     num = std::max(num, std::fabs(a[i] - b[i]));
@@ -57,17 +60,21 @@ static double relErr(const double* a, const double* b, int n) {
   return den > 0 ? num / den : num;
 }
 
-static const char* methodName(int m) {
-  static const char* names[] = {"KDTREE", "DIRECT26", "DIRECT7", "DIRECT1"};
+static const char * methodName(int m)
+{
+  static const char * names[] = {"KDTREE", "DIRECT26", "DIRECT7", "DIRECT1"};
   return names[m];
 }
 
-static void toRowMajor(const Eigen::Matrix4f& T, float out[16]) {
+static void toRowMajor(const Eigen::Matrix4f & T, float out[16])
+{
   for (int r = 0; r < 4; r++)
     for (int c = 0; c < 4; c++) out[r * 4 + c] = T(r, c);
 }
 
-static void gaussParams(double resolution, double outlier_ratio, double& d1, double& d2, double& d3) {
+static void gaussParams(
+  double resolution, double outlier_ratio, double & d1, double & d2, double & d3)
+{
   const double c1 = 10.0 * (1 - outlier_ratio);
   const double c2 = outlier_ratio / std::pow(resolution, 3);
   d3 = -std::log(c2);
@@ -76,8 +83,10 @@ static void gaussParams(double resolution, double outlier_ratio, double& d1, dou
 }
 
 /** \brief Exposes the internals of the OpenMP NDT. */
-struct OmpProbe : public pclomp::NormalDistributionsTransform<PointT, PointT> {
-  double eval(const Vec6& p, Vec6& g, Mat6& H) {
+struct OmpProbe : public pclomp::NormalDistributionsTransform<PointT, PointT>
+{
+  double eval(const Vec6 & p, Vec6 & g, Mat6 & H)
+  {
     Eigen::Matrix4f T;
     convertTransform(p, T);
     Cloud trans;
@@ -87,8 +96,11 @@ struct OmpProbe : public pclomp::NormalDistributionsTransform<PointT, PointT> {
   }
 };
 
-/** \brief Evaluates the (emulated) CUDA backend. ndt_omp_sign reproduces ndt_omp's float-path sign of h_ang d1. */
-static ndt_cuda::DerivativeResult evalBackend(ndt_cuda::GpuBackend& backend, const Vec6& p, int mode, float resolution, bool ndt_omp_sign) {
+/** \brief Evaluates the (emulated) CUDA backend. ndt_omp_sign reproduces ndt_omp's float-path sign
+ * of h_ang d1. */
+static ndt_cuda::DerivativeResult evalBackend(
+  ndt_cuda::GpuBackend & backend, const Vec6 & p, int mode, float resolution, bool ndt_omp_sign)
+{
   ndt_cuda::DerivativeParams params;
   Eigen::Matrix4f T;
   pclomp::NormalDistributionsTransform<PointT, PointT>::convertTransform(p, T);
@@ -103,17 +115,19 @@ static ndt_cuda::DerivativeResult evalBackend(ndt_cuda::GpuBackend& backend, con
   return backend.computeDerivatives(params);
 }
 
-static std::vector<float> pack(const Cloud& cloud) {
+static std::vector<float> pack(const Cloud & cloud)
+{
   std::vector<float> v;
   v.reserve(cloud.size() * 4);
-  for (const auto& pt : cloud) v.insert(v.end(), {pt.x, pt.y, pt.z, 0.0f});
+  for (const auto & pt : cloud) v.insert(v.end(), {pt.x, pt.y, pt.z, 0.0f});
   return v;
 }
 
 // ---------------------------------------------------------------------------------------------
 // 0. Voxel grid identical to ndt_omp's
 // ---------------------------------------------------------------------------------------------
-static void testVoxelGrid(const Cloud::Ptr& target) {
+static void testVoxelGrid(const Cloud::Ptr & target)
+{
   std::printf("\n[0] voxel grid vs pclomp::VoxelGridCovariance\n");
   for (float resolution : {0.5f, 1.0f, 2.0f}) {
     pclomp::VoxelGridCovariance<PointT> ref;
@@ -125,12 +139,13 @@ static void testVoxelGrid(const Cloud::Ptr& target) {
     ours.setLeafSize(resolution);
     ours.build(*target);
 
-    const bool same_box = ref.getMinBoxCoordinates() == ours.getMinBoxCoordinates() && ref.getMaxBoxCoordinates() == ours.getMaxBoxCoordinates() &&
+    const bool same_box = ref.getMinBoxCoordinates() == ours.getMinBoxCoordinates() &&
+                          ref.getMaxBoxCoordinates() == ours.getMaxBoxCoordinates() &&
                           ref.getDivisionMultiplier() == ours.getDivisionMultiplier();
     std::size_t compared = 0, mismatches = 0;
     double max_mean = 0.0, max_icov = 0.0;
-    const auto& ref_leaves = ref.getLeaves();
-    for (const auto& [key, leaf] : ref_leaves) {
+    const auto & ref_leaves = ref.getLeaves();
+    for (const auto & [key, leaf] : ref_leaves) {
       const auto it = ours.getLeaves().find(static_cast<int>(key));
       if (it == ours.getLeaves().end() || it->second.nr_points != leaf.nr_points) {
         mismatches++;
@@ -143,9 +158,12 @@ static void testVoxelGrid(const Cloud::Ptr& target) {
     }
     mismatches += ours.getLeaves().size() != ref_leaves.size() ? 1 : 0;
     char label[128];
-    std::snprintf(label, sizeof(label), "res %.1f: bounding box / leaf set / point counts mismatches", resolution);
+    std::snprintf(
+      label, sizeof(label), "res %.1f: bounding box / leaf set / point counts mismatches",
+      resolution);
     check(same_box && mismatches == 0, label, double(mismatches + (same_box ? 0 : 1)), 0.0);
-    std::snprintf(label, sizeof(label), "res %.1f: max |mean diff| over %zu voxels", resolution, compared);
+    std::snprintf(
+      label, sizeof(label), "res %.1f: max |mean diff| over %zu voxels", resolution, compared);
     check(max_mean == 0.0, label, max_mean, 0.0);
     std::snprintf(label, sizeof(label), "res %.1f: max |inverse covariance diff|", resolution);
     check(max_icov == 0.0, label, max_icov, 0.0);
@@ -155,7 +173,8 @@ static void testVoxelGrid(const Cloud::Ptr& target) {
 // ---------------------------------------------------------------------------------------------
 // 1. Per-evaluation comparison with ndt_omp
 // ---------------------------------------------------------------------------------------------
-static void testDerivativesAgainstOmp(const Cloud::Ptr& target, const Cloud::Ptr& source) {
+static void testDerivativesAgainstOmp(const Cloud::Ptr & target, const Cloud::Ptr & source)
+{
   std::printf("\n[1] score / gradient / hessian vs pclomp::NormalDistributionsTransform\n");
   const float resolution = 1.0f;
 
@@ -174,7 +193,8 @@ static void testDerivativesAgainstOmp(const Cloud::Ptr& target, const Cloud::Ptr
   backend.setTarget(grid);
   const std::vector<float> packed = pack(*source);
   backend.setSource(packed.data(), source->size());
-  std::printf("  %zu voxels, %zu source points\n", backend.numTargetVoxels(), backend.numSourcePoints());
+  std::printf(
+    "  %zu voxels, %zu source points\n", backend.numTargetVoxels(), backend.numSourcePoints());
 
   std::vector<Vec6> poses(3);
   poses[0] << 0, 0, 0, 0, 0, 0;
@@ -184,7 +204,7 @@ static void testDerivativesAgainstOmp(const Cloud::Ptr& target, const Cloud::Ptr
   for (int mode = 0; mode < 4; mode++) {
     omp.setNeighborhoodSearchMethod(static_cast<pclomp::NeighborSearchMethod>(mode));
     double worst_s = 0, worst_g = 0, worst_h = 0, worst_h_fixed = 0;
-    for (const Vec6& p : poses) {
+    for (const Vec6 & p : poses) {
       Vec6 g;
       Mat6 H;
       const double s = omp.eval(p, g, H);
@@ -207,7 +227,8 @@ static void testDerivativesAgainstOmp(const Cloud::Ptr& target, const Cloud::Ptr
     check(worst_g < 1e-4, label, worst_g, 1e-4);
     std::snprintf(label, sizeof(label), "%s hessian rel. error (ndt_omp sign)", methodName(mode));
     check(worst_h < 1e-4, label, worst_h, 1e-4);
-    std::snprintf(label, sizeof(label), "%s hessian rel. error excl. H(4,4) (fixed sign)", methodName(mode));
+    std::snprintf(
+      label, sizeof(label), "%s hessian rel. error excl. H(4,4) (fixed sign)", methodName(mode));
     check(worst_h_fixed < 1e-4, label, worst_h_fixed, 1e-4);
   }
 
@@ -222,7 +243,8 @@ static void testDerivativesAgainstOmp(const Cloud::Ptr& target, const Cloud::Ptr
     const std::vector<float> pt = pack(trans);
     double d1, d2, d3;
     gaussParams(resolution, 0.55, d1, d2, d3);
-    const double s_gpu = backend.calculateScore(pt.data(), trans.size(), d1, d2, d3, resolution, mode);
+    const double s_gpu =
+      backend.calculateScore(pt.data(), trans.size(), d1, d2, d3, resolution, mode);
     char label[128];
     std::snprintf(label, sizeof(label), "%s calculateScore rel. error", methodName(mode));
     const double err = std::fabs(s_gpu - s_omp) / std::fabs(s_omp);
@@ -233,7 +255,8 @@ static void testDerivativesAgainstOmp(const Cloud::Ptr& target, const Cloud::Ptr
 // ---------------------------------------------------------------------------------------------
 // 2. Finite differences on a synthetic grid
 // ---------------------------------------------------------------------------------------------
-static void testFiniteDifferences() {
+static void testFiniteDifferences()
+{
   std::printf("\n[2] gradient / hessian vs central finite differences (synthetic grid)\n");
   std::mt19937 rng(42);
   std::uniform_real_distribution<double> u(-1.0, 1.0);
@@ -255,14 +278,22 @@ static void testFiniteDifferences() {
       for (int x = lo[0]; x <= hi[0]; x++) {
         const Eigen::Vector3d center(x + 0.5, y + 0.5, z + 0.5);
         const Eigen::Vector3d mean = center + 0.1 * Eigen::Vector3d(u(rng), u(rng), u(rng));
-        const Eigen::Matrix3d R = Eigen::AngleAxisd(u(rng) * M_PI, Eigen::Vector3d(u(rng), u(rng), u(rng)).normalized()).toRotationMatrix();
+        const Eigen::Matrix3d R =
+          Eigen::AngleAxisd(u(rng) * M_PI, Eigen::Vector3d(u(rng), u(rng), u(rng)).normalized())
+            .toRotationMatrix();
         const Eigen::Vector3d s(0.11 + 0.09 * u(rng), 0.11 + 0.09 * u(rng), 0.03 + 0.01 * u(rng));
         const Eigen::Matrix3d icov = (R * s.asDiagonal() * R.transpose()).inverse();
-        grid.keys.push_back((x - lo[0]) * grid.divb_mul[0] + (y - lo[1]) * grid.divb_mul[1] + (z - lo[2]) * grid.divb_mul[2]);
+        grid.keys.push_back(
+          (x - lo[0]) * grid.divb_mul[0] + (y - lo[1]) * grid.divb_mul[1] +
+          (z - lo[2]) * grid.divb_mul[2]);
         grid.means.insert(grid.means.end(), {mean(0), mean(1), mean(2)});
-        grid.icovs.insert(grid.icovs.end(), {icov(0, 0), icov(0, 1), icov(0, 2), icov(1, 1), icov(1, 2), icov(2, 2)});
-        grid.flags.push_back(ndt_cuda::VoxelGridHost::kFlagDirect | ndt_cuda::VoxelGridHost::kFlagCentroid);
-        for (int i = 0; i < 30; i++) world.push_back(center + 0.3 * Eigen::Vector3d(u(rng), u(rng), u(rng)));
+        grid.icovs.insert(
+          grid.icovs.end(),
+          {icov(0, 0), icov(0, 1), icov(0, 2), icov(1, 1), icov(1, 2), icov(2, 2)});
+        grid.flags.push_back(
+          ndt_cuda::VoxelGridHost::kFlagDirect | ndt_cuda::VoxelGridHost::kFlagCentroid);
+        for (int i = 0; i < 30; i++)
+          world.push_back(center + 0.3 * Eigen::Vector3d(u(rng), u(rng), u(rng)));
       }
     }
   }
@@ -273,7 +304,7 @@ static void testFiniteDifferences() {
   pclomp::NormalDistributionsTransform<PointT, PointT>::convertTransform(p0, T0);
   const Eigen::Matrix4d T0inv = T0.cast<double>().inverse();
   std::vector<float> src;
-  for (const auto& y : world) {
+  for (const auto & y : world) {
     const Eigen::Vector3d x = (T0inv * y.homogeneous()).head<3>();
     src.insert(src.end(), {float(x(0)), float(x(1)), float(x(2)), 0.0f});
   }
@@ -287,7 +318,8 @@ static void testFiniteDifferences() {
     const auto r0 = evalBackend(backend, p0, mode, 1.0f, false);
     const auto r0_omp_sign = evalBackend(backend, p0, mode, 1.0f, true);
     Mat6 H = Eigen::Map<const Eigen::Matrix<double, 6, 6, Eigen::RowMajor>>(r0.hessian);
-    Mat6 H_omp_sign = Eigen::Map<const Eigen::Matrix<double, 6, 6, Eigen::RowMajor>>(r0_omp_sign.hessian);
+    Mat6 H_omp_sign =
+      Eigen::Map<const Eigen::Matrix<double, 6, 6, Eigen::RowMajor>>(r0_omp_sign.hessian);
     Mat6 H_fd;
     Vec6 g_fd;
     for (int k = 0; k < 6; k++) {
@@ -308,23 +340,29 @@ static void testFiniteDifferences() {
     check(eh < 1e-2, label, eh, 1e-2);
     const double e44 = std::fabs(H(4, 4) - H_fd(4, 4)) / std::fabs(H_fd(4, 4));
     const double e44_omp = std::fabs(H_omp_sign(4, 4) - H_fd(4, 4)) / std::fabs(H_fd(4, 4));
-    std::snprintf(label, sizeof(label), "%s H(4,4) vs FD, -sin(pitch) (used here)", methodName(mode));
+    std::snprintf(
+      label, sizeof(label), "%s H(4,4) vs FD, -sin(pitch) (used here)", methodName(mode));
     check(e44 < 1e-2, label, e44, 1e-2);
-    std::printf("  %-58s %12.3e  (ndt_omp float path, info only)\n", (std::string(methodName(mode)) + " H(4,4) vs FD, +sin(pitch)").c_str(), e44_omp);
+    std::printf(
+      "  %-58s %12.3e  (ndt_omp float path, info only)\n",
+      (std::string(methodName(mode)) + " H(4,4) vs FD, +sin(pitch)").c_str(), e44_omp);
   }
 }
 
 // ---------------------------------------------------------------------------------------------
 // 3. End-to-end registration
 // ---------------------------------------------------------------------------------------------
-static void transformDiff(const Eigen::Matrix4d& a, const Eigen::Matrix4d& b, double& dt, double& dr_deg) {
+static void transformDiff(
+  const Eigen::Matrix4d & a, const Eigen::Matrix4d & b, double & dt, double & dr_deg)
+{
   const Eigen::Matrix4d d = a.inverse() * b;
   dt = d.block<3, 1>(0, 3).norm();
   const double c = std::max(-1.0, std::min(1.0, (d.block<3, 3>(0, 0).trace() - 1.0) / 2.0));
   dr_deg = std::acos(c) * 180.0 / M_PI;
 }
 
-static void testAlignment(const Cloud::Ptr& target, const Cloud::Ptr& source) {
+static void testAlignment(const Cloud::Ptr & target, const Cloud::Ptr & source)
+{
   std::printf("\n[3] align() vs pclomp::NormalDistributionsTransform\n");
 
   Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
@@ -334,15 +372,17 @@ static void testAlignment(const Cloud::Ptr& target, const Cloud::Ptr& source) {
   for (int with_guess = 0; with_guess < 2; with_guess++) {
     for (int mode = 0; mode < 4; mode++) {
       pclomp::NormalDistributionsTransform<PointT, PointT> omp;
-      pclomp::NormalDistributionsTransformCUDA<PointT, PointT> gpu;  // alias from <ndt_cuda/pclomp_compat.hpp>
-      for (auto* reg : std::vector<pcl::Registration<PointT, PointT>*>{&omp, &gpu}) {
+      pclomp::NormalDistributionsTransformCUDA<PointT, PointT>
+        gpu;  // alias from <ndt_cuda/pclomp_compat.hpp>
+      for (auto * reg : std::vector<pcl::Registration<PointT, PointT> *>{&omp, &gpu}) {
         reg->setInputTarget(target);
         reg->setInputSource(source);
       }
       omp.setResolution(1.0);
       gpu.setResolution(1.0);
       omp.setNeighborhoodSearchMethod(static_cast<pclomp::NeighborSearchMethod>(mode));
-      gpu.setNeighborhoodSearchMethod(static_cast<pclomp::NeighborSearchMethod>(mode));  // ndt_omp enum accepted
+      gpu.setNeighborhoodSearchMethod(
+        static_cast<pclomp::NeighborSearchMethod>(mode));  // ndt_omp enum accepted
 
       Cloud a_omp, a_gpu;
       if (with_guess) {
@@ -354,40 +394,54 @@ static void testAlignment(const Cloud::Ptr& target, const Cloud::Ptr& source) {
       }
 
       double dt, dr;
-      transformDiff(omp.getFinalTransformation().cast<double>(), gpu.getFinalTransformation().cast<double>(), dt, dr);
+      transformDiff(
+        omp.getFinalTransformation().cast<double>(), gpu.getFinalTransformation().cast<double>(),
+        dt, dr);
       // The aligned output cloud must be the source transformed by the final transformation.
       Cloud expected;
       pcl::transformPointCloud(*source, expected, gpu.getFinalTransformation());
       double max_out = 0.0;
       for (std::size_t i = 0; i < expected.size(); i++) {
-        max_out = std::max(max_out, double((expected[i].getVector3fMap() - a_gpu[i].getVector3fMap()).norm()));
+        max_out = std::max(
+          max_out, double((expected[i].getVector3fMap() - a_gpu[i].getVector3fMap()).norm()));
       }
 
-      std::printf("  %-8s %-10s iters omp/gpu %2d/%2d  trans_prob %.5f/%.5f  dt %.2e m  dr %.2e deg\n", methodName(mode), with_guess ? "guess" : "identity", omp.getFinalNumIteration(),
-                  gpu.getFinalNumIteration(), omp.getTransformationProbability(), gpu.getTransformationProbability(), dt, dr);
+      std::printf(
+        "  %-8s %-10s iters omp/gpu %2d/%2d  trans_prob %.5f/%.5f  dt %.2e m  dr %.2e deg\n",
+        methodName(mode), with_guess ? "guess" : "identity", omp.getFinalNumIteration(),
+        gpu.getFinalNumIteration(), omp.getTransformationProbability(),
+        gpu.getTransformationProbability(), dt, dr);
       char label[128];
-      std::snprintf(label, sizeof(label), "%s %s transform translation diff [m]", methodName(mode), with_guess ? "guess" : "identity");
+      std::snprintf(
+        label, sizeof(label), "%s %s transform translation diff [m]", methodName(mode),
+        with_guess ? "guess" : "identity");
       check(dt < 1e-2, label, dt, 1e-2);
-      std::snprintf(label, sizeof(label), "%s %s transform rotation diff [deg]", methodName(mode), with_guess ? "guess" : "identity");
+      std::snprintf(
+        label, sizeof(label), "%s %s transform rotation diff [deg]", methodName(mode),
+        with_guess ? "guess" : "identity");
       check(dr < 5e-2, label, dr, 5e-2);
-      std::snprintf(label, sizeof(label), "%s %s aligned cloud consistency [m]", methodName(mode), with_guess ? "guess" : "identity");
+      std::snprintf(
+        label, sizeof(label), "%s %s aligned cloud consistency [m]", methodName(mode),
+        with_guess ? "guess" : "identity");
       check(max_out < 1e-5, label, max_out, 1e-5);
     }
   }
 
   // Large map coordinates, as in localization: the map is far from the origin, the scan stays in
   // the sensor frame and the initial guess carries the large translation.
-  std::printf("\n[3b] large map coordinates (target shifted by (40000, -25000, 50) m, guess = shift)\n");
+  std::printf(
+    "\n[3b] large map coordinates (target shifted by (40000, -25000, 50) m, guess = shift)\n");
   const Eigen::Vector3d offset(40000.0, -25000.0, 50.0);
   Cloud::Ptr target_s(new Cloud(*target));
-  for (auto& pt : *target_s) pt.getVector3fMap() = (pt.getVector3fMap().cast<double>() + offset).cast<float>();
+  for (auto & pt : *target_s)
+    pt.getVector3fMap() = (pt.getVector3fMap().cast<double>() + offset).cast<float>();
   Eigen::Matrix4d S = Eigen::Matrix4d::Identity();
   S.block<3, 1>(0, 3) = offset;
 
   for (int mode : {pclomp::DIRECT7, pclomp::KDTREE}) {
     ndt_cuda::NormalDistributionsTransformCUDA<PointT, PointT> gpu_ref, gpu_s;
     pclomp::NormalDistributionsTransform<PointT, PointT> omp_s;
-    for (auto* reg : std::vector<pcl::Registration<PointT, PointT>*>{&gpu_ref, &gpu_s, &omp_s}) {
+    for (auto * reg : std::vector<pcl::Registration<PointT, PointT> *>{&gpu_ref, &gpu_s, &omp_s}) {
       reg->setInputSource(source);
     }
     gpu_ref.setResolution(1.0);
@@ -410,55 +464,73 @@ static void testAlignment(const Cloud::Ptr& target, const Cloud::Ptr& source) {
     transformDiff(expected, gpu_s.getFinalTransformation().cast<double>(), dt, dr);
     transformDiff(expected, omp_s.getFinalTransformation().cast<double>(), dt_o, dr_o);
     char label[128];
-    std::snprintf(label, sizeof(label), "%s cuda: shifted vs unshifted, translation [m]", methodName(mode));
+    std::snprintf(
+      label, sizeof(label), "%s cuda: shifted vs unshifted, translation [m]", methodName(mode));
     check(dt < 1e-2, label, dt, 1e-2);
-    std::snprintf(label, sizeof(label), "%s cuda: shifted vs unshifted, rotation [deg]", methodName(mode));
+    std::snprintf(
+      label, sizeof(label), "%s cuda: shifted vs unshifted, rotation [deg]", methodName(mode));
     check(dr < 5e-2, label, dr, 5e-2);
-    std::printf("  %-58s %12.3e  (info; rotation %.2e deg, iters omp %d / cuda %d)\n", (std::string(methodName(mode)) + " omp : shifted vs unshifted, translation [m]").c_str(), dt_o, dr_o,
-                omp_s.getFinalNumIteration(), gpu_s.getFinalNumIteration());
+    std::printf(
+      "  %-58s %12.3e  (info; rotation %.2e deg, iters omp %d / cuda %d)\n",
+      (std::string(methodName(mode)) + " omp : shifted vs unshifted, translation [m]").c_str(),
+      dt_o, dr_o, omp_s.getFinalNumIteration(), gpu_s.getFinalNumIteration());
   }
 }
 
 // ---------------------------------------------------------------------------------------------
 // 4. Drop-in compatibility
 // ---------------------------------------------------------------------------------------------
-int compatStandaloneDirect7();  // compat_standalone.cpp: <ndt_cuda/pclomp_compat.hpp> without ndt_omp
+int compatStandaloneDirect7();  // compat_standalone.cpp: <ndt_cuda/pclomp_compat.hpp> without
+                                // ndt_omp
 
-static void testCompat(const Cloud::Ptr& target, const Cloud::Ptr& source) {
+static void testCompat(const Cloud::Ptr & target, const Cloud::Ptr & source)
+{
   std::printf("\n[4] drop-in compatibility\n");
-  // Used through the pcl::Registration interface, exactly like pclomp::NormalDistributionsTransform.
-  pcl::Registration<PointT, PointT>::Ptr reg(new pclomp::NormalDistributionsTransformCUDA<PointT, PointT>());
+  // Used through the pcl::Registration interface, exactly like
+  // pclomp::NormalDistributionsTransform.
+  pcl::Registration<PointT, PointT>::Ptr reg(
+    new pclomp::NormalDistributionsTransformCUDA<PointT, PointT>());
   reg->setInputTarget(target);
   reg->setInputSource(source);
   Cloud out;
   reg->align(out);
-  check(reg->hasConverged(), "align() through pcl::Registration::Ptr converged", reg->hasConverged() ? 0.0 : 1.0, 0.0);
-  check(compatStandaloneDirect7() == static_cast<int>(ndt_cuda::DIRECT7), "pclomp::DIRECT7 without ndt_omp (compat header)", 0.0, 0.0);
+  check(
+    reg->hasConverged(), "align() through pcl::Registration::Ptr converged",
+    reg->hasConverged() ? 0.0 : 1.0, 0.0);
+  check(
+    compatStandaloneDirect7() == static_cast<int>(ndt_cuda::DIRECT7),
+    "pclomp::DIRECT7 without ndt_omp (compat header)", 0.0, 0.0);
 }
 
 // ---------------------------------------------------------------------------------------------
 // 5. Target handling
 // ---------------------------------------------------------------------------------------------
-static void testTargetHandling(const Cloud::Ptr& target, const Cloud::Ptr& source) {
+static void testTargetHandling(const Cloud::Ptr & target, const Cloud::Ptr & source)
+{
   std::printf("\n[5] target handling\n");
   using NDT = ndt_cuda::NormalDistributionsTransformCUDA<PointT, PointT>;
 
-  // pcl::Registration rejects an empty cloud; this must not crash and align() must report the failure.
+  // pcl::Registration rejects an empty cloud; this must not crash and align() must report the
+  // failure.
   NDT empty;
   empty.setInputTarget(Cloud::Ptr(new Cloud));
   empty.setInputSource(source);
   Cloud out;
   empty.align(out);
-  check(!empty.hasConverged(), "empty target as first target: align() does not converge", empty.hasConverged() ? 1.0 : 0.0, 0.0);
+  check(
+    !empty.hasConverged(), "empty target as first target: align() does not converge",
+    empty.hasConverged() ? 1.0 : 0.0, 0.0);
 
-  // pcl::Registration::getFitnessScore() needs the kd-tree built by the first align(). A guess 3 m off gives a clearly nonzero score.
+  // pcl::Registration::getFitnessScore() needs the kd-tree built by the first align(). A guess 3 m
+  // off gives a clearly nonzero score.
   Eigen::Matrix4f off = Eigen::Matrix4f::Identity();
   off(0, 3) = 3.0f;
   for (const int iterations : {1, 35}) {
     pclomp::NormalDistributionsTransform<PointT, PointT> omp;
     NDT gpu;
-    pcl::Registration<PointT, PointT>* base = &gpu;
-    for (pcl::Registration<PointT, PointT>* reg : std::vector<pcl::Registration<PointT, PointT>*>{&omp, &gpu}) {
+    pcl::Registration<PointT, PointT> * base = &gpu;
+    for (pcl::Registration<PointT, PointT> * reg :
+         std::vector<pcl::Registration<PointT, PointT> *>{&omp, &gpu}) {
       reg->setMaximumIterations(iterations);
       reg->setInputTarget(target);
       reg->setInputSource(source);
@@ -467,26 +539,38 @@ static void testTargetHandling(const Cloud::Ptr& target, const Cloud::Ptr& sourc
     const double fitness_omp = omp.getFitnessScore();
     const double error = std::fabs(base->getFitnessScore() - fitness_omp) / fitness_omp;
     char label[128];
-    std::snprintf(label, sizeof(label), "getFitnessScore() vs ndt_omp, %d iterations, rel. error", iterations);
+    std::snprintf(
+      label, sizeof(label), "getFitnessScore() vs ndt_omp, %d iterations, rel. error", iterations);
     check(fitness_omp > 0.1 && error < 1e-2, label, error, 1e-2);
   }
 
   // The kd-tree can be turned off for faster map changes.
-  struct Probe : NDT {
+  struct Probe : NDT
+  {
     bool kdtreePending() const { return this->target_cloud_updated_; }
   };
   Probe probe;
   probe.setInputTarget(target);
-  check(probe.kdtreePending(), "kd-tree pending after setInputTarget() by default", probe.kdtreePending() ? 0.0 : 1.0, 0.0);
+  check(
+    probe.kdtreePending(), "kd-tree pending after setInputTarget() by default",
+    probe.kdtreePending() ? 0.0 : 1.0, 0.0);
   probe.setBuildTargetKdTree(false);
-  check(!probe.kdtreePending(), "no kd-tree pending once turned off", probe.kdtreePending() ? 1.0 : 0.0, 0.0);
+  check(
+    !probe.kdtreePending(), "no kd-tree pending once turned off", probe.kdtreePending() ? 1.0 : 0.0,
+    0.0);
   probe.setInputTarget(target);
-  check(!probe.kdtreePending(), "no kd-tree pending after setInputTarget() while off", probe.kdtreePending() ? 1.0 : 0.0, 0.0);
+  check(
+    !probe.kdtreePending(), "no kd-tree pending after setInputTarget() while off",
+    probe.kdtreePending() ? 1.0 : 0.0, 0.0);
   probe.setInputSource(source);
   probe.align(out);
-  check(probe.hasConverged(), "align() without the kd-tree converged", probe.hasConverged() ? 0.0 : 1.0, 0.0);
+  check(
+    probe.hasConverged(), "align() without the kd-tree converged", probe.hasConverged() ? 0.0 : 1.0,
+    0.0);
   probe.setBuildTargetKdTree(true);
-  check(probe.kdtreePending(), "kd-tree pending again once turned back on", probe.kdtreePending() ? 0.0 : 1.0, 0.0);
+  check(
+    probe.kdtreePending(), "kd-tree pending again once turned back on",
+    probe.kdtreePending() ? 0.0 : 1.0, 0.0);
 
   // Non-finite points are ignored even if the cloud is wrongly marked as dense.
   Cloud::Ptr with_nan(new Cloud(*target));
@@ -501,21 +585,30 @@ static void testTargetHandling(const Cloud::Ptr& target, const Cloud::Ptr& sourc
   nan_target.setInputTarget(with_nan);
   nan_target.setInputSource(source);
   nan_target.align(out);
-  const float nan_diff = (clean.getFinalTransformation() - nan_target.getFinalTransformation()).cwiseAbs().maxCoeff();
-  check(nan_target.hasConverged() && nan_diff == 0.0f, "NaN points in a dense target: same result as without them", nan_diff, 0.0);
+  const float nan_diff =
+    (clean.getFinalTransformation() - nan_target.getFinalTransformation()).cwiseAbs().maxCoeff();
+  check(
+    nan_target.hasConverged() && nan_diff == 0.0f,
+    "NaN points in a dense target: same result as without them", nan_diff, 0.0);
 
   // A copy has its own GPU state and gets the map on its own.
   NDT copied(clean);
   copied.setInputSource(source);
   copied.align(out);
-  const float copy_diff = (clean.getFinalTransformation() - copied.getFinalTransformation()).cwiseAbs().maxCoeff();
-  check(copied.hasConverged() && copy_diff == 0.0f, "copy: same result as the original", copy_diff, 0.0);
+  const float copy_diff =
+    (clean.getFinalTransformation() - copied.getFinalTransformation()).cwiseAbs().maxCoeff();
+  check(
+    copied.hasConverged() && copy_diff == 0.0f, "copy: same result as the original", copy_diff,
+    0.0);
   NDT assigned;
   assigned = clean;
   assigned.setInputSource(source);
   assigned.align(out);
-  const float assign_diff = (clean.getFinalTransformation() - assigned.getFinalTransformation()).cwiseAbs().maxCoeff();
-  check(assigned.hasConverged() && assign_diff == 0.0f, "assignment: same result as the original", assign_diff, 0.0);
+  const float assign_diff =
+    (clean.getFinalTransformation() - assigned.getFinalTransformation()).cwiseAbs().maxCoeff();
+  check(
+    assigned.hasConverged() && assign_diff == 0.0f, "assignment: same result as the original",
+    assign_diff, 0.0);
 
   // A target without usable voxels must not be reported as a successful alignment.
   Cloud::Ptr only_nan(new Cloud);
@@ -525,7 +618,10 @@ static void testTargetHandling(const Cloud::Ptr& target, const Cloud::Ptr& sourc
   no_voxels.setInputTarget(only_nan);
   no_voxels.setInputSource(source);
   no_voxels.align(out);
-  check(no_voxels.getNumTargetVoxels() == 0 && !no_voxels.hasConverged(), "only NaN points in the target: align() does not converge", no_voxels.hasConverged() ? 1.0 : 0.0, 0.0);
+  check(
+    no_voxels.getNumTargetVoxels() == 0 && !no_voxels.hasConverged(),
+    "only NaN points in the target: align() does not converge",
+    no_voxels.hasConverged() ? 1.0 : 0.0, 0.0);
 
   // setResolution() after setInputTarget() rebuilds the grid.
   NDT resolution_after, resolution_before;
@@ -533,7 +629,11 @@ static void testTargetHandling(const Cloud::Ptr& target, const Cloud::Ptr& sourc
   resolution_after.setResolution(2.0);
   resolution_before.setResolution(2.0);
   resolution_before.setInputTarget(target);
-  check(resolution_after.getNumTargetVoxels() == resolution_before.getNumTargetVoxels(), "setResolution() after setInputTarget() rebuilds the grid", double(resolution_after.getNumTargetVoxels()) - double(resolution_before.getNumTargetVoxels()), 0.0);
+  check(
+    resolution_after.getNumTargetVoxels() == resolution_before.getNumTargetVoxels(),
+    "setResolution() after setInputTarget() rebuilds the grid",
+    double(resolution_after.getNumTargetVoxels()) - double(resolution_before.getNumTargetVoxels()),
+    0.0);
 
   // The covariance formula of Autoware: scatter matrix and identity divided by n - 1.
   {
@@ -554,13 +654,19 @@ static void testTargetHandling(const Cloud::Ptr& target, const Cloud::Ptr& sourc
       moment += p * p.transpose();
     }
     const Eigen::Vector3d mean = sum / n;
-    const Eigen::Matrix3d expected_cov = (moment - n * mean * mean.transpose() + Eigen::Matrix3d::Identity()) / (n - 1);
+    const Eigen::Matrix3d expected_cov =
+      (moment - n * mean * mean.transpose() + Eigen::Matrix3d::Identity()) / (n - 1);
     ndt_cuda::VoxelGridCovariance<PointT> autoware_cells;
     autoware_cells.setLeafSize(1.0f);
     autoware_cells.setUseAutowareCovariance(true);
     autoware_cells.build(*voxel_points);
-    const double cov_error = (autoware_cells.getLeaves().begin()->second.icov - expected_cov.inverse()).cwiseAbs().maxCoeff();
-    check(autoware_cells.getLeaves().size() == 1 && cov_error < 1e-9, "Autoware covariance formula", cov_error, 1e-9);
+    const double cov_error =
+      (autoware_cells.getLeaves().begin()->second.icov - expected_cov.inverse())
+        .cwiseAbs()
+        .maxCoeff();
+    check(
+      autoware_cells.getLeaves().size() == 1 && cov_error < 1e-9, "Autoware covariance formula",
+      cov_error, 1e-9);
   }
 
   // A failed upload must not leave the old map in use.
@@ -576,17 +682,22 @@ static void testTargetHandling(const Cloud::Ptr& target, const Cloud::Ptr& sourc
   bool threw = false;
   try {
     backend.setTarget(grid);
-  } catch (const std::invalid_argument&) {
+  } catch (const std::invalid_argument &) {
     threw = true;
   }
-  check(voxels_before > 0 && threw && backend.numTargetVoxels() == 0, "failed setTarget() leaves no target", double(backend.numTargetVoxels()), 0.0);
+  check(
+    voxels_before > 0 && threw && backend.numTargetVoxels() == 0,
+    "failed setTarget() leaves no target", double(backend.numTargetVoxels()), 0.0);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char ** argv)
+{
   const std::string data_dir = argc > 1 ? argv[1] : NDT_CUDA_DATA_DIR;
 
   Cloud::Ptr target(new Cloud), source(new Cloud);
-  if (pcl::io::loadPCDFile(data_dir + "/251370668.pcd", *target) || pcl::io::loadPCDFile(data_dir + "/251371071.pcd", *source)) {
+  if (
+    pcl::io::loadPCDFile(data_dir + "/251370668.pcd", *target) ||
+    pcl::io::loadPCDFile(data_dir + "/251371071.pcd", *source)) {
     std::fprintf(stderr, "failed to load the test clouds from %s\n", data_dir.c_str());
     return 1;
   }
@@ -607,6 +718,8 @@ int main(int argc, char** argv) {
   testCompat(target, source);
   testTargetHandling(target, source);
 
-  std::printf("\n%s (%d failure%s)\n", g_failures ? "FAILED" : "PASSED", g_failures, g_failures == 1 ? "" : "s");
+  std::printf(
+    "\n%s (%d failure%s)\n", g_failures ? "FAILED" : "PASSED", g_failures,
+    g_failures == 1 ? "" : "s");
   return g_failures ? 1 : 0;
 }

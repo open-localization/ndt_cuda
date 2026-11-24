@@ -35,30 +35,35 @@
  *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
  *
- *  Derived from pcl::VoxelGridCovariance and pclomp::VoxelGridCovariance (koide3/ndt_omp, BSD 2-Clause,
- *  Copyright (c) 2019, k.koide). Rewritten without the pcl::VoxelGrid base class; the voxel statistics
- *  are computed exactly as in ndt_omp so that both produce identical grids.
+ *  Derived from pcl::VoxelGridCovariance and pclomp::VoxelGridCovariance (koide3/ndt_omp, BSD
+ * 2-Clause, Copyright (c) 2019, k.koide). Rewritten without the pcl::VoxelGrid base class; the
+ * voxel statistics are computed exactly as in ndt_omp so that both produce identical grids.
  */
 
 #pragma once
 
-#include <cstdint>
-#include <unordered_map>
-
 #include <Eigen/Core>
+#include <ndt_cuda/gpu_backend.hpp>
+
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
-#include <ndt_cuda/gpu_backend.hpp>
+#include <cstdint>
+#include <unordered_map>
 
-namespace ndt_cuda {
+namespace ndt_cuda
+{
 
-/** \brief Voxel grid holding the mean and inverse covariance of the points in each voxel (NDT target representation). */
+/** \brief Voxel grid holding the mean and inverse covariance of the points in each voxel (NDT
+ * target representation). */
 template <typename PointT>
-class VoxelGridCovariance {
+class VoxelGridCovariance
+{
 public:
-  struct Leaf {
-    /** \brief Number of points, or -1 if the voxel had enough points but a degenerate covariance. */
+  struct Leaf
+  {
+    /** \brief Number of points, or -1 if the voxel had enough points but a degenerate covariance.
+     */
     int nr_points = 0;
     Eigen::Vector3d mean = Eigen::Vector3d::Zero();
     Eigen::Matrix3d cov = Eigen::Matrix3d::Identity();
@@ -73,35 +78,41 @@ public:
   float getLeafSize() const { return leaf_size_; }
 
   /** \brief Minimum number of points for a voxel to be used (default 6, at least 3). */
-  void setMinPointPerVoxel(int min_points) { min_points_per_voxel_ = min_points > 2 ? min_points : 3; }
+  void setMinPointPerVoxel(int min_points)
+  {
+    min_points_per_voxel_ = min_points > 2 ? min_points : 3;
+  }
   int getMinPointPerVoxel() const { return min_points_per_voxel_; }
 
-  /** \brief Eigenvalues smaller than this fraction of the largest one are inflated (default 0.01, Equation 6.11 [Magnusson 2009]). */
+  /** \brief Eigenvalues smaller than this fraction of the largest one are inflated (default 0.01,
+   * Equation 6.11 [Magnusson 2009]). */
   void setMinCovarEigvalueMult(double mult) { min_covar_eigvalue_mult_ = mult; }
   double getMinCovarEigvalueMult() const { return min_covar_eigvalue_mult_; }
 
-  /** \brief Use the covariance formula of Autoware's copy of the voxel grid (default false: the formula of ndt_omp).
-   * Autoware divides the scatter matrix by n - 1. ndt_omp multiplies it by (n - 1) / n^2, which gives smaller covariances
-   * and so lower scores. Both add a small multiple of the identity to it.
+  /** \brief Use the covariance formula of Autoware's copy of the voxel grid (default false: the
+   * formula of ndt_omp). Autoware divides the scatter matrix by n - 1. ndt_omp multiplies it by (n
+   * - 1) / n^2, which gives smaller covariances and so lower scores. Both add a small multiple of
+   * the identity to it.
    */
   void setUseAutowareCovariance(bool use) { use_autoware_covariance_ = use; }
   bool getUseAutowareCovariance() const { return use_autoware_covariance_; }
 
   /** \brief Builds the grid from a cloud.
-   * \return false if the cloud is empty or the leaf size is too small for the extent of the cloud (the grid is then empty).
+   * \return false if the cloud is empty or the leaf size is too small for the extent of the cloud
+   * (the grid is then empty).
    */
-  bool build(const pcl::PointCloud<PointT>& cloud);
+  bool build(const pcl::PointCloud<PointT> & cloud);
 
-  const LeafMap& getLeaves() const { return leaves_; }
-  const Eigen::Vector3i& getMinBoxCoordinates() const { return min_b_; }
-  const Eigen::Vector3i& getMaxBoxCoordinates() const { return max_b_; }
-  const Eigen::Vector3i& getDivisionMultiplier() const { return divb_mul_; }
+  const LeafMap & getLeaves() const { return leaves_; }
+  const Eigen::Vector3i & getMinBoxCoordinates() const { return min_b_; }
+  const Eigen::Vector3i & getMaxBoxCoordinates() const { return max_b_; }
+  const Eigen::Vector3i & getDivisionMultiplier() const { return divb_mul_; }
 
   /** \brief Number of voxels usable by the DIRECT* searches. */
   std::size_t getNumValidVoxels() const;
 
   /** \brief Flattens the grid into the format uploaded to the GPU. */
-  void exportTo(VoxelGridHost& grid) const;
+  void exportTo(VoxelGridHost & grid) const;
 
 private:
   float leaf_size_ = 1.0f;

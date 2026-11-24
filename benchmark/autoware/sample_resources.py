@@ -41,15 +41,25 @@ def machine_cpu():
 
 def gpu_stat():
     out = subprocess.run(
-        ["nvidia-smi", "-i", "0", "--query-gpu=utilization.gpu,utilization.memory,memory.used", "--format=csv,noheader,nounits"],
-        capture_output=True, text=True).stdout
+        [
+            "nvidia-smi",
+            "-i",
+            "0",
+            "--query-gpu=utilization.gpu,utilization.memory,memory.used",
+            "--format=csv,noheader,nounits",
+        ],
+        capture_output=True,
+        text=True,
+    ).stdout
     return [float(v) for v in out.strip().split(",")]
 
 
 def process_vram(pid):
     out = subprocess.run(
         ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
-        capture_output=True, text=True).stdout
+        capture_output=True,
+        text=True,
+    ).stdout
     for line in out.splitlines():
         fields = line.split(",")
         if len(fields) == 2 and fields[0].strip() == str(pid):
@@ -64,7 +74,18 @@ def main(process_name, output_path):
 
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["time", "ndt_cpu_percent", "ndt_rss_mib", "machine_cpu_percent", "gpu_percent", "gpu_memory_percent", "vram_mib", "ndt_vram_mib"])
+        writer.writerow(
+            [
+                "time",
+                "ndt_cpu_percent",
+                "ndt_rss_mib",
+                "machine_cpu_percent",
+                "gpu_percent",
+                "gpu_memory_percent",
+                "vram_mib",
+                "ndt_vram_mib",
+            ]
+        )
         pid = None
         last_cpu = last_time = None
         last_busy, last_total = machine_cpu()
@@ -88,7 +109,18 @@ def main(process_name, output_path):
             machine = round(100.0 * (busy - last_busy) / max(total - last_total, 1e-9), 1)
             last_busy, last_total = busy, total
             gpu, gpu_memory, vram = gpu_stat()
-            writer.writerow([round(now, 3), cpu_percent, rss, machine, gpu, gpu_memory, vram, process_vram(pid) if pid else 0.0])
+            writer.writerow(
+                [
+                    round(now, 3),
+                    cpu_percent,
+                    rss,
+                    machine,
+                    gpu,
+                    gpu_memory,
+                    vram,
+                    process_vram(pid) if pid else 0.0,
+                ]
+            )
             f.flush()
 
 

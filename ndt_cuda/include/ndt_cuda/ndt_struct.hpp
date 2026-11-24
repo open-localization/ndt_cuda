@@ -13,21 +13,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// pclomp::NdtParams and pclomp::NdtResult of tier4/ndt_omp (include/pclomp/ndt_struct.hpp), with the same fields.
+// pclomp::NdtParams and pclomp::NdtResult of tier4/ndt_omp (include/pclomp/ndt_struct.hpp), with
+// the same fields.
 
 #pragma once
 
-#include <vector>
-
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-
 #include <ndt_cuda/search_method.hpp>
 
-namespace ndt_cuda {
+#include <vector>
+
+namespace ndt_cuda
+{
 
 /** \brief Everything an alignment produced. */
-struct NdtResult {
+struct NdtResult
+{
   Eigen::Matrix4f pose;
   float transform_probability;
   float nearest_voxel_transformation_likelihood;
@@ -40,7 +42,8 @@ struct NdtResult {
 };
 
 /** \brief Parameters of an alignment, for setParams() and getParams(). */
-struct NdtParams {
+struct NdtParams
+{
   double trans_epsilon{};
   double step_size{};
   double resolution{};

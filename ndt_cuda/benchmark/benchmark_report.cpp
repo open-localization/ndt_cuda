@@ -1,12 +1,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026, Melike
 //
-// Produces the measurements of docs/benchmark.md: repeated timings on the sample data and on synthetic large clouds,
-// ndt_omp thread scaling, agreement with ndt_omp, determinism, getFitnessScore() and the cost of a map change.
+// Produces the measurements of docs/benchmark.md: repeated timings on the sample data and on
+// synthetic large clouds, ndt_omp thread scaling, agreement with ndt_omp, determinism,
+// getFitnessScore() and the cost of a map change.
 //
 // The full run takes about 30 minutes, nearly all of it in ndt_omp on the largest clouds.
 //
-// usage: ndt_cuda_benchmark_report [data_dir] [max_source_points]   (max_source_points defaults to 5000000)
+// usage: ndt_cuda_benchmark_report [data_dir] [max_source_points]   (max_source_points defaults to
+// 5000000)
+
+#include <ndt_cuda/ndt_cuda.hpp>
+
+#include <omp.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pclomp/ndt_omp.h>
 
 #include <algorithm>
 #include <chrono>
@@ -17,32 +28,27 @@
 #include <string>
 #include <vector>
 
-#include <omp.h>
-
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-
-#include <pclomp/ndt_omp.h>
-#include <ndt_cuda/ndt_cuda.hpp>
-
 using PointT = pcl::PointXYZ;
 using Cloud = pcl::PointCloud<PointT>;
 using NdtGpu = ndt_cuda::NormalDistributionsTransformCUDA<PointT, PointT>;
 using NdtOmp = pclomp::NormalDistributionsTransform<PointT, PointT>;
 
-static const char* const kMethods[] = {"KDTREE", "DIRECT26", "DIRECT7", "DIRECT1"};
+static const char * const kMethods[] = {"KDTREE", "DIRECT26", "DIRECT7", "DIRECT1"};
 
-struct Timing {
+struct Timing
+{
   double median, p10, p90;
 };
 
-static double nowMs() {
-  return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+static double nowMs()
+{
+  return std::chrono::duration<double, std::milli>(
+           std::chrono::steady_clock::now().time_since_epoch())
+    .count();
 }
 
-static Cloud::Ptr loadDownsampled(const std::string& path) {
+static Cloud::Ptr loadDownsampled(const std::string & path)
+{
   Cloud::Ptr cloud(new Cloud), filtered(new Cloud);
   if (pcl::io::loadPCDFile(path, *cloud)) {
     return nullptr;
@@ -54,14 +60,16 @@ static Cloud::Ptr loadDownsampled(const std::string& path) {
   return filtered;
 }
 
-/** \brief Synthetic cloud of n points: repeats the input with 5 mm of Gaussian noise on each axis. */
-static Cloud::Ptr repeatWithNoise(const Cloud& input, std::size_t n) {
+/** \brief Synthetic cloud of n points: repeats the input with 5 mm of Gaussian noise on each axis.
+ */
+static Cloud::Ptr repeatWithNoise(const Cloud & input, std::size_t n)
+{
   Cloud::Ptr output(new Cloud);
   std::mt19937 rng(1);
   std::normal_distribution<float> noise(0.0f, 0.005f);
   output->reserve(n);
   while (output->size() < n) {
-    for (const auto& pt : input) {
+    for (const auto & pt : input) {
       if (output->size() >= n) break;
       PointT q = pt;
       q.x += noise(rng);
@@ -73,7 +81,9 @@ static Cloud::Ptr repeatWithNoise(const Cloud& input, std::size_t n) {
   return output;
 }
 
-static void transformDiff(const Eigen::Matrix4f& a, const Eigen::Matrix4f& b, double& dt, double& dr_deg) {
+static void transformDiff(
+  const Eigen::Matrix4f & a, const Eigen::Matrix4f & b, double & dt, double & dr_deg)
+{
   const Eigen::Matrix4d d = a.cast<double>().inverse() * b.cast<double>();
   dt = d.block<3, 1>(0, 3).norm();
   const double c = std::max(-1.0, std::min(1.0, (d.block<3, 3>(0, 0).trace() - 1.0) / 2.0));
@@ -81,7 +91,8 @@ static void transformDiff(const Eigen::Matrix4f& a, const Eigen::Matrix4f& b, do
 }
 
 template <typename Registration>
-static Timing timeAlign(Registration& reg, const Cloud::Ptr& source, int warmup, int repeats) {
+static Timing timeAlign(Registration & reg, const Cloud::Ptr & source, int warmup, int repeats)
+{
   Cloud aligned;
   reg.setInputSource(source);
   for (int i = 0; i < warmup; i++) {
@@ -97,7 +108,8 @@ static Timing timeAlign(Registration& reg, const Cloud::Ptr& source, int warmup,
   return {times[times.size() / 2], times[times.size() / 10], times[times.size() * 9 / 10]};
 }
 
-static void configure(NdtOmp& omp, NdtGpu& gpu, int mode, const Cloud::Ptr& target) {
+static void configure(NdtOmp & omp, NdtGpu & gpu, int mode, const Cloud::Ptr & target)
+{
   omp.setNumThreads(omp_get_max_threads());
   omp.setResolution(1.0);
   gpu.setResolution(1.0);
@@ -107,11 +119,17 @@ static void configure(NdtOmp& omp, NdtGpu& gpu, int mode, const Cloud::Ptr& targ
   gpu.setInputTarget(target);
 }
 
-static void measureScaling(const Cloud::Ptr& target, const Cloud::Ptr& source, std::size_t max_points) {
+static void measureScaling(
+  const Cloud::Ptr & target, const Cloud::Ptr & source, std::size_t max_points)
+{
   std::printf("\n[timing] align() in ms, median (p10-p90)\n");
-  std::printf("%-9s %-9s %28s %28s %9s %6s %10s %9s\n", "points", "method", "ndt_omp", "ndt_cuda", "speedup", "iters", "dt[um]", "dr[deg]");
+  std::printf(
+    "%-9s %-9s %28s %28s %9s %6s %10s %9s\n", "points", "method", "ndt_omp", "ndt_cuda", "speedup",
+    "iters", "dt[um]", "dr[deg]");
 
-  for (const std::size_t n : {std::size_t(0), std::size_t(100000), std::size_t(300000), std::size_t(1000000), std::size_t(5000000)}) {
+  for (const std::size_t n :
+       {std::size_t(0), std::size_t(100000), std::size_t(300000), std::size_t(1000000),
+        std::size_t(5000000)}) {
     if (n > max_points) continue;
     const Cloud::Ptr cloud = n ? repeatWithNoise(*source, n) : source;
     const int repeats = n >= 5000000 ? 7 : n >= 1000000 ? 15 : n ? 31 : 101;
@@ -121,19 +139,24 @@ static void measureScaling(const Cloud::Ptr& target, const Cloud::Ptr& source, s
       NdtGpu gpu;
       configure(omp, gpu, mode, target);
       // DIRECT26 is by far the slowest method in ndt_omp.
-      const Timing t_omp = timeAlign(omp, cloud, 2, (mode == pclomp::DIRECT26 && n >= 1000000) ? 5 : repeats);
+      const Timing t_omp =
+        timeAlign(omp, cloud, 2, (mode == pclomp::DIRECT26 && n >= 1000000) ? 5 : repeats);
       const Timing t_gpu = timeAlign(gpu, cloud, 5, repeats);
 
       double dt, dr;
       transformDiff(omp.getFinalTransformation(), gpu.getFinalTransformation(), dt, dr);
-      std::printf("%-9zu %-9s %10.2f (%7.2f-%7.2f) %10.2f (%7.2f-%7.2f) %8.1fx %3d/%-2d %10.1f %9.5f\n", cloud->size(), kMethods[mode], t_omp.median, t_omp.p10, t_omp.p90, t_gpu.median, t_gpu.p10, t_gpu.p90,
-                  t_omp.median / t_gpu.median, omp.getFinalNumIteration(), gpu.getFinalNumIteration(), dt * 1e6, dr);
+      std::printf(
+        "%-9zu %-9s %10.2f (%7.2f-%7.2f) %10.2f (%7.2f-%7.2f) %8.1fx %3d/%-2d %10.1f %9.5f\n",
+        cloud->size(), kMethods[mode], t_omp.median, t_omp.p10, t_omp.p90, t_gpu.median, t_gpu.p10,
+        t_gpu.p90, t_omp.median / t_gpu.median, omp.getFinalNumIteration(),
+        gpu.getFinalNumIteration(), dt * 1e6, dr);
       std::fflush(stdout);
     }
   }
 }
 
-static void measureThreads(const Cloud::Ptr& target, const Cloud::Ptr& source) {
+static void measureThreads(const Cloud::Ptr & target, const Cloud::Ptr & source)
+{
   std::printf("\n[threads] ndt_omp DIRECT7 on the sample data\n");
   std::vector<int> counts = {1, 4, 8, 16, omp_get_max_threads()};
   std::sort(counts.begin(), counts.end());
@@ -150,7 +173,8 @@ static void measureThreads(const Cloud::Ptr& target, const Cloud::Ptr& source) {
   }
 }
 
-static void measureDeterminism(const Cloud::Ptr& target, const Cloud::Ptr& source) {
+static void measureDeterminism(const Cloud::Ptr & target, const Cloud::Ptr & source)
+{
   std::printf("\n[determinism] 200 repeats against the first result\n");
   for (int mode = 0; mode < 4; mode++) {
     NdtGpu gpu;
@@ -166,13 +190,15 @@ static void measureDeterminism(const Cloud::Ptr& target, const Cloud::Ptr& sourc
     for (int i = 0; i < 200; i++) {
       gpu.align(aligned);
       const Eigen::Matrix4f current = gpu.getFinalTransformation();
-      different += std::memcmp(first.data(), current.data(), sizeof(float) * 16) != 0 || probability != gpu.getTransformationProbability();
+      different += std::memcmp(first.data(), current.data(), sizeof(float) * 16) != 0 ||
+                   probability != gpu.getTransformationProbability();
     }
     std::printf("%-9s differing results: %d\n", kMethods[mode], different);
   }
 }
 
-static void measurePerturbedGuess(const Cloud::Ptr& target, const Cloud::Ptr& source) {
+static void measurePerturbedGuess(const Cloud::Ptr & target, const Cloud::Ptr & source)
+{
   std::printf("\n[perturbed guess] about 0.95 m and 2.9 deg\n");
   Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
   guess.block<3, 3>(0, 0) = Eigen::AngleAxisf(0.05f, Eigen::Vector3f::UnitZ()).toRotationMatrix();
@@ -188,12 +214,17 @@ static void measurePerturbedGuess(const Cloud::Ptr& target, const Cloud::Ptr& so
     gpu.align(aligned, guess);
     double dt, dr;
     transformDiff(omp.getFinalTransformation(), gpu.getFinalTransformation(), dt, dr);
-    std::printf("%-9s iters %d/%d  dt %.1f um  dr %.5f deg  fitness %.6f/%.6f\n", kMethods[mode], omp.getFinalNumIteration(), gpu.getFinalNumIteration(), dt * 1e6, dr, omp.getFitnessScore(), gpu.getFitnessScore());
+    std::printf(
+      "%-9s iters %d/%d  dt %.1f um  dr %.5f deg  fitness %.6f/%.6f\n", kMethods[mode],
+      omp.getFinalNumIteration(), gpu.getFinalNumIteration(), dt * 1e6, dr, omp.getFitnessScore(),
+      gpu.getFitnessScore());
   }
 }
 
 template <typename Registration>
-static void measureMapChange(Registration& reg, const char* name, const Cloud::Ptr& map, const Cloud::Ptr& source) {
+static void measureMapChange(
+  Registration & reg, const char * name, const Cloud::Ptr & map, const Cloud::Ptr & source)
+{
   reg.setResolution(1.0);
   const double t0 = nowMs();
   reg.setInputTarget(map);
@@ -208,9 +239,12 @@ static void measureMapChange(Registration& reg, const char* name, const Cloud::P
   std::printf("%-9zu %-9s %18.1f %14.2f %15.2f\n", map->size(), name, t1 - t0, t3 - t2, t4 - t3);
 }
 
-static void measureMapChanges(const Cloud::Ptr& target, const Cloud::Ptr& source) {
+static void measureMapChanges(const Cloud::Ptr & target, const Cloud::Ptr & source)
+{
   std::printf("\n[map change] DIRECT7, times in ms, single measurements\n");
-  std::printf("%-9s %-9s %18s %14s %15s\n", "points", "impl", "setInputTarget", "first align", "second align");
+  std::printf(
+    "%-9s %-9s %18s %14s %15s\n", "points", "impl", "setInputTarget", "first align",
+    "second align");
   for (const std::size_t n : {std::size_t(1000000), std::size_t(3000000)}) {
     const Cloud::Ptr map = repeatWithNoise(*target, n);
     NdtGpu gpu;
@@ -225,7 +259,8 @@ static void measureMapChanges(const Cloud::Ptr& target, const Cloud::Ptr& source
   }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char ** argv)
+{
   const std::string data_dir = argc > 1 ? argv[1] : NDT_CUDA_DATA_DIR;
   const std::size_t max_points = argc > 2 ? std::stoull(argv[2]) : 5000000;
 
