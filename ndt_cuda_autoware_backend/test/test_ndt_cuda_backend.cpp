@@ -13,11 +13,10 @@
 // limitations under the License.
 
 // The backend "ndt_cuda" must work as the interface requires, and its results must agree with the
-// backend "ndt_omp" of autoware_ndt_scan_matcher. The tests need a CUDA device. Without one, they are
-// skipped.
+// backend "ndt_omp" of autoware_ndt_scan_matcher. The tests need a CUDA device. Without one, they
+// are skipped.
 
 #include <Eigen/Geometry>
-
 #include <autoware/ndt_scan_matcher_common/ndt_backend.hpp>
 #include <pluginlib/class_loader.hpp>
 
@@ -26,8 +25,8 @@
 
 #include <cmath>
 #include <cstddef>
-#include <memory>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -157,8 +156,7 @@ TEST(NdtCudaBackend, AlignAgreesWithTheOmpBackend)
     EXPECT_NEAR(
       result.nearest_voxel_transformation_likelihood,
       expected.nearest_voxel_transformation_likelihood, 1e-3);
-    EXPECT_LT(
-      (result.hessian - expected.hessian).norm(), 1e-2 * expected.hessian.norm());
+    EXPECT_LT((result.hessian - expected.hessian).norm(), 1e-2 * expected.hessian.norm());
 
     // What the node needs from the arrays (see NdtResult).
     const auto size = static_cast<std::size_t>(result.iteration_num) + 1;
@@ -277,8 +275,7 @@ TEST(NdtCudaBackend, CloneEmptyHasTheParametersAndNoMap)
   reference->commit_target();
   // The empty instance has no regularization pose, as the reference.
   EXPECT_EQ(
-    empty->align(make_guess(), make_scan()).pose,
-    reference->align(make_guess(), make_scan()).pose);
+    empty->align(make_guess(), make_scan()).pose, reference->align(make_guess(), make_scan()).pose);
 }
 
 // The node replaces a part of the map while the active instance aligns in another thread.

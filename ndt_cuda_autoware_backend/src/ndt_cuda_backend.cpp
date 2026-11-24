@@ -112,10 +112,7 @@ public:
   // Merges the voxels of all clouds and copies them to the GPU.
   void commit_target() override { ndt_->createVoxelKdtree(); }
 
-  std::vector<std::string> get_current_map_ids() const override
-  {
-    return ndt_->getCurrentMapIDs();
-  }
+  std::vector<std::string> get_current_map_ids() const override { return ndt_->getCurrentMapIDs(); }
 
   bool has_target() const override { return !ndt_->getCurrentMapIDs().empty(); }
 

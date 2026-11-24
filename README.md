@@ -32,9 +32,9 @@ CUDA accelerated **Normal Distributions Transform (NDT)** point cloud registrati
 
 This repository holds two packages:
 
-| Directory | Package |
-|---|---|
-| [`ndt_cuda`](ndt_cuda) | The library. It does not need ROS or Autoware. |
+| Directory                                                | Package                                                                                                                                   |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| [`ndt_cuda`](ndt_cuda)                                   | The library. It does not need ROS or Autoware.                                                                                            |
 | [`ndt_cuda_autoware_backend`](ndt_cuda_autoware_backend) | The NDT backend `ndt_cuda` for Autoware's `autoware_ndt_scan_matcher`. It needs Autoware Core, so build it only in an Autoware workspace. |
 
 ### ROS 2
