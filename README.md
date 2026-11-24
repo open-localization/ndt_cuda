@@ -43,7 +43,7 @@ This repository holds two packages:
 cd ~/ros2_ws/src
 git clone https://github.com/meliketanrikulu/ndt_cuda.git
 cd ~/ros2_ws
-rosdep install --from-paths src --ignore-src -y   # PCL, Eigen (install the CUDA toolkit separately)
+rosdep install --from-paths src/ndt_cuda/ndt_cuda --ignore-src -y   # PCL, Eigen (install the CUDA toolkit separately)
 colcon build --packages-select ndt_cuda --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 

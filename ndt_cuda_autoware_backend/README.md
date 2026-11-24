@@ -21,7 +21,7 @@ Put this repository in the `src` directory of a workspace that has Autoware Core
 colcon build --packages-up-to ndt_cuda_autoware_backend --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
-Do not add compiler options that change the alignment of Eigen (for example `-mavx`) to only this package. The node then refuses to load the backend.
+Build `ndt_cuda`, this package and `autoware_ndt_scan_matcher` with the same compiler options that change the alignment of Eigen (for example `-mavx`). If only this package or the node gets other options, the node refuses to load the backend. If only `ndt_cuda` gets other options, nothing finds the mismatch, and the backend can corrupt memory.
 
 ## Use
 
