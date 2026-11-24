@@ -35,7 +35,7 @@ using Cloud = pcl::PointCloud<PointT>;
 using Ndt = ndt_cuda::NormalDistributionsTransformCUDA<PointT, PointT>;
 using Clock = std::chrono::steady_clock;
 
-static std::string g_data_dir;
+static const char * g_data_dir = nullptr;
 
 static double elapsedMs(Clock::time_point from)
 {
@@ -143,9 +143,10 @@ static Cloud::Ptr sampleWithNoise(const Cloud & map, std::size_t n)
 static void makeClouds(
   std::size_t num_voxels, std::size_t num_points, Cloud::Ptr & map, Cloud::Ptr & scan)
 {
-  map = num_voxels ? syntheticMap(num_voxels) : loadDownsampled(g_data_dir + "/251370668.pcd");
-  scan =
-    num_points ? sampleWithNoise(*map, num_points) : loadDownsampled(g_data_dir + "/251371071.pcd");
+  map = num_voxels ? syntheticMap(num_voxels)
+                   : loadDownsampled(std::string(g_data_dir) + "/251370668.pcd");
+  scan = num_points ? sampleWithNoise(*map, num_points)
+                    : loadDownsampled(std::string(g_data_dir) + "/251371071.pcd");
 }
 
 static void measureMemory(std::size_t num_voxels, std::size_t num_points)

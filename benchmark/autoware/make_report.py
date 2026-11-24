@@ -17,7 +17,7 @@ import sys
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402 (after matplotlib.use())
 
 MODES = {
     "builtin": ("Autoware NDT (CPU)", "#4c72b0"),

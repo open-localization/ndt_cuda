@@ -15,12 +15,13 @@
 
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace ndt_cuda
 {
 
-using namespace kernels;
+using namespace kernels;  // NOLINT(build/namespaces): the same names as gpu_backend.cu
 
 struct GpuBackend::Impl
 {
@@ -92,7 +93,7 @@ struct GpuBackend::Impl
   }
 };
 
-GpuBackend::GpuBackend(int) : impl_(new Impl)
+GpuBackend::GpuBackend([[maybe_unused]] int device) : impl_(new Impl)
 {
 }
 GpuBackend::~GpuBackend()
@@ -133,10 +134,12 @@ void GpuBackend::setTarget(const VoxelGridHost & g)
     const double * mu = &g.means[3 * i];
     const double * ic = &g.icovs[6 * i];
     m.voxels[i].a = make_float4(
-      float(mu[0] - m.origin[0]), float(mu[1] - m.origin[1]), float(mu[2] - m.origin[2]),
-      float(ic[0]));
-    m.voxels[i].b = make_float4(float(ic[1]), float(ic[2]), float(ic[3]), float(ic[4]));
-    m.voxels[i].c = make_float4(float(ic[5]), 0.0f, 0.0f, 0.0f);
+      static_cast<float>(mu[0] - m.origin[0]), static_cast<float>(mu[1] - m.origin[1]),
+      static_cast<float>(mu[2] - m.origin[2]), static_cast<float>(ic[0]));
+    m.voxels[i].b = make_float4(
+      static_cast<float>(ic[1]), static_cast<float>(ic[2]), static_cast<float>(ic[3]),
+      static_cast<float>(ic[4]));
+    m.voxels[i].c = make_float4(static_cast<float>(ic[5]), 0.0f, 0.0f, 0.0f);
   }
   bool unique_keys = true;
   const std::size_t capacity =
@@ -314,7 +317,7 @@ int GpuBackend::deviceCount()
 {
   return 1;
 }
-std::string GpuBackend::deviceName(int)
+std::string GpuBackend::deviceName([[maybe_unused]] int device)
 {
   return "CPU emulation";
 }

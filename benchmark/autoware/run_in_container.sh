@@ -10,14 +10,20 @@ OUTPUT="$4"
 RVIZ="${5:-false}"
 RATE="${RATE:-0.2}"
 
+# shellcheck source=/dev/null
 source /opt/autoware/setup.bash
 case "$MODE" in
 builtin) ;;
-ndt_cuda) source "$WORKSPACE/install/setup.bash" ;;
+ndt_cuda)
+    # shellcheck source=/dev/null
+    source "$WORKSPACE/install/setup.bash"
+    ;;
 cuda_ndt_matcher)
+    # shellcheck source=/dev/null
     source "$CUDA_NDT_MATCHER_DIR/install/setup.bash"
     export LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
-    export AMENT_PREFIX_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cuda_overlay:$AMENT_PREFIX_PATH"
+    OVERLAY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cuda_overlay"
+    export AMENT_PREFIX_PATH="$OVERLAY:$AMENT_PREFIX_PATH"
     ;;
 *)
     echo "unknown mode $MODE" >&2
@@ -53,6 +59,7 @@ if [[ $RVIZ == "true" ]]; then
         sleep 2
     fi
     # On the virtual screen, the window is made to fill the screen. Everything else is Autoware's default configuration.
+    # shellcheck disable=SC2046 # The -e options must split into separate words.
     sed -e 's/Target Frame: viewer/Target Frame: base_link/' \
         $([[ -n ${VIDEO:-} ]] && echo "-e s/^\(\s*\)Height:\s*1565/\1Height:\x201080/ -e s/^\(\s*\)Width:\s*2813/\1Width:\x201920/ -e s/^\(\s*\)X:\s*67\$/\1X:\x200/ -e s/^\(\s*\)Y:\s*27\$/\1Y:\x200/") \
         "$(ros2 pkg prefix --share autoware_launch)/rviz/autoware.rviz" >"$OUTPUT/view.rviz"
@@ -77,6 +84,7 @@ for _ in $(seq 1 90); do
 done
 sleep "${SETTLE_SECONDS:-15}"
 
+# shellcheck disable=SC2086 # EXTRA_TOPICS is a list of topics that must split into words.
 ros2 bag record -s sqlite3 -o "$OUTPUT/bag" \
     /localization/util/downsample/pointcloud \
     /localization/pose_estimator/exe_time_ms \

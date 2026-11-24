@@ -17,6 +17,7 @@
 #include <pcl/point_types.h>
 #include <pclomp/ndt_omp.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>

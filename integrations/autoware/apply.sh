@@ -26,6 +26,7 @@ rm -f "$OMP_INCLUDE/multi_voxel_grid_covariance_omp.h"
 rm -f "$PACKAGE"/src/ndt_omp/multi_voxel_grid_covariance_omp* "$PACKAGE"/src/ndt_omp/multigrid_ndt_omp*
 
 sed -i '/src\/ndt_omp\/multi_voxel_grid_covariance_omp.cpp/d; /src\/ndt_omp\/multigrid_ndt_omp.cpp/d' "$PACKAGE/CMakeLists.txt"
+# shellcheck disable=SC2016 # ${PCL_LIBRARIES} is CMake text, not a shell variable.
 sed -i 's/^target_link_libraries(multigrid_ndt_omp \${PCL_LIBRARIES})$/find_package(ndt_cuda REQUIRED)\ntarget_link_libraries(multigrid_ndt_omp ${PCL_LIBRARIES} ndt_cuda::ndt_cuda)/' "$PACKAGE/CMakeLists.txt"
 # These calls relied on argument dependent lookup in pclomp::, but the types are now in ndt_cuda::.
 sed -i 's/\([^:]\)\b\(estimate_xy_covariance_by_multi_ndt\)/\1pclomp::\2/' "$PACKAGE/src/ndt_scan_matcher_core.cpp"

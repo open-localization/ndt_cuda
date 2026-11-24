@@ -25,7 +25,7 @@ implementations; they are not part of the library.
 
 ## Point Cloud Library (PCL) — BSD 3-Clause License
 
-```
+```text
 Software License Agreement (BSD License)
 
 Point Cloud Library (PCL) - www.pointclouds.org
@@ -68,7 +68,7 @@ The NDT implementation in PCL was written by Brian Okorn (Space and Naval Warfar
 
 <https://github.com/koide3/ndt_omp>
 
-```
+```text
 BSD 2-Clause License
 
 Copyright (c) 2019, k.koide
@@ -104,7 +104,7 @@ The multi-tile NDT and `ndt_struct.hpp` of [tier4/ndt_omp](https://github.com/ti
 Copyright 2022–2024 TIER IV, Inc. and licensed under the Apache License, Version 2.0. The three files of ndt_cuda
 derived from them (see the table above) keep that license; their headers state the changes.
 
-```
+```text
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/

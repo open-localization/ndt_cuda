@@ -42,7 +42,7 @@ def export(run_dir, nsys):
 
 
 def busy_intervals(database, process):
-    """Merged intervals in nanoseconds of Unix time during which the GPU ran work of the process."""
+    """Return the merged intervals (Unix time in ns) in which the GPU ran work of the process."""
     db = sqlite3.connect(database)
     epoch = db.execute("SELECT utcEpochNs FROM TARGET_INFO_SESSION_START_TIME").fetchone()[0]
     # Linux keeps the first 15 characters of a process name.
