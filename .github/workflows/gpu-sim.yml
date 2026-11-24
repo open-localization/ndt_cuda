@@ -10,14 +10,14 @@ name: GPU Simulator
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
     paths:
-      - "src/**"
-      - "include/**"
-      - "test/**"
-      - "data/**"
-      - "cmake/**"
-      - "CMakeLists.txt"
+      - "ndt_cuda/src/**"
+      - "ndt_cuda/include/**"
+      - "ndt_cuda/test/**"
+      - "ndt_cuda/data/**"
+      - "ndt_cuda/cmake/**"
+      - "ndt_cuda/CMakeLists.txt"
       - ".github/workflows/gpu-sim.yml"
 
 concurrency:
@@ -54,8 +54,8 @@ jobs:
       # 90-virtual embeds PTX only, which the simulator runs.
       - name: Configure
         run: |
-          sed -i 's/CUDA::cudart_static/CUDA::cudart/' CMakeLists.txt
-          cmake -S . -B build \
+          sed -i 's/CUDA::cudart_static/CUDA::cudart/' ndt_cuda/CMakeLists.txt
+          cmake -S ndt_cuda -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH=/usr/local/cuda-13.0 \
             -DCMAKE_CUDA_ARCHITECTURES=90-virtual \
